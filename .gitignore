@@ -1,0 +1,7 @@
+*.vclo
+*.vo
+*.glob
+cache/*
+Rocq/*
+!Rocq/*.v
+!Rocq/_CoqProject

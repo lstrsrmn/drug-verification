@@ -24,7 +24,7 @@ normalise x = foreach i .
 pk : InputVector -> OutputVector
 
 normpk : UnnormalisedInputVector -> OutputVector
-normpk x = pk (normalise x)
+normpk x = pk (x)
 
 safeInput : InputVector -> Bool
 safeInput x = 
@@ -33,8 +33,8 @@ safeInput x =
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
     50 <= x ! weight <= 100 and
-    -- 0 <= x ! sex <= 1
     ((x ! sex == 1 ) or (x ! sex == 0))
+    -- 0 <= x ! sex <= 1
 
 safeOutput : InputVector -> Bool
 -- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
@@ -87,10 +87,10 @@ healthy = forall x . healthyInput x => healthyOutput x
 
 -------
 
-healthydirection : InputVector -> Real
+nextTemp : InputVector -> Real
 -- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
-healthydirection x = let y = normpk x in (x ! temp) + 1 * (0.08 -0.005*((x ! conc) + ((y ! 0)/30)) - 0.12 * ((x ! temp) - 37 )) 
+nextTemp x = let y = normpk x in (x ! temp) + 1 * (0.08 -0.005*((x ! conc) + ((y ! 0)/30)) - 0.12 * ((x ! temp) - 37 )) 
 
 @property
-healthydirectionhelp: Bool
-healthydirectionhelp = forall x. safeInput x => healthydirection x <= (x ! temp)
+tempDecr : Bool
+tempDecr = forall x. safeInput x => nextTemp x <= (x ! temp)
