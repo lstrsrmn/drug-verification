@@ -41,15 +41,11 @@ Parameter pk : InputVector -> OutputVector.
 
 Definition normpk (x : UnnormalisedInputVector) : OutputVector := pk x.
 
-Definition safeInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= const_t (30 : R))) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ (x^^sex == const_t (1 : R)) \/ (x^^sex == const_t (0 : R)))))).
+Definition safeOutput (x : InputVector) : Prop := (const_t (0 : R) <= (((normpk x)^^0 / const_t (30 : R)) + x^^conc)) /\ ((((normpk x)^^0 / const_t (30 : R)) + x^^conc) <= const_t (30 : R)).
 
-Definition safeOutput (x : InputVector) : Prop := (- const_t (1 : R) <= (((normpk x)^^0 / const_t (30 : R)) + x^^conc)) /\ ((((normpk x)^^0 / const_t (30 : R)) + x^^conc) <= const_t (50 : R)).
+Definition unhealthyInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= const_t (30 : R))) /\ (((const_t (38 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (12 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ (x^^sex == const_t (1 : R)) \/ (x^^sex == const_t (0 : R)))))).
 
-Axiom safe : forall x, safeInput x -> safeOutput x.
-
-Definition unhealthyInput (x : InputVector) : Prop := ((const_t (10 : R) <= x^^conc) /\ (x^^conc <= const_t (30 : R))) /\ (((const_t (38 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (12 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ (x^^sex == const_t (1 : R)) \/ (x^^sex == const_t (0 : R)))))).
-
-Definition unhealthyOutput (x : InputVector) : Prop := (const_t (10 : R) <= (((normpk x)^^0 / const_t (30 : R)) + x^^conc)) /\ ((((normpk x)^^0 / const_t (30 : R)) + x^^conc) <= const_t (50 : R)).
+Definition unhealthyOutput (x : InputVector) : Prop := (const_t (10 : R) <= (((normpk x)^^0 / const_t (30 : R)) + x^^conc)) /\ ((((normpk x)^^0 / const_t (30 : R)) + x^^conc) <= const_t (30 : R)).
 
 Axiom unhealthy : forall x, unhealthyInput x -> unhealthyOutput x.
 
@@ -59,6 +55,10 @@ Definition healthyOutput (x : InputVector) : Prop := (normpk x)^^0 == const_t (0
 
 Axiom healthy : forall x, healthyInput x -> healthyOutput x.
 
-Definition nextTemp (x : InputVector) : 'nT[R]_(nil) := let y := normpk x in x^^temp + (const_t (1 : R) * (const_t (2 / 25 : R) - (const_t (1 / 200 : R) * x^^conc + (y^^0 / const_t (30 : R)))) - (const_t (3 / 25 : R) * x^^temp - const_t (37 : R))).
+Axiom safe : forall x, healthyInput x \/ unhealthyInput x -> safeOutput x.
 
-Axiom tempDecr : forall x, safeInput x -> nextTemp x <= x^^temp.
+Definition nextTemp (x : InputVector) : 'nT[R]_(nil) := let y := normpk x in (((x^^temp + const_t (2 / 25 : R)) - (const_t (1 / 200 : R) * x^^conc)) + (y^^0 / const_t (30 : R))) - (const_t (3 / 25 : R) * x^^temp - const_t (37 : R)).
+
+Axiom tempDecr : forall x, unhealthyInput x -> nextTemp x <= (x^^temp - const_t (1 / 100 : R)).
+
+Axiom tempStable : forall x, healthyInput x -> (const_t (36 : R) <= nextTemp x) /\ (nextTemp x <= const_t (38 : R)).

@@ -38,18 +38,15 @@ safeInput x =
 
 safeOutput : InputVector -> Bool
 -- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
-safeOutput x = -1 <= ((normpk x) ! 0)/30 + (x ! conc) <= 50
+safeOutput x = 0 <= ((normpk x) ! 0)/30 + (x ! conc) <= 30
 
 
-@property
-safe: Bool
-safe = forall x . safeInput x => safeOutput x
 
 ---------
 
 unhealthyInput : InputVector -> Bool
 unhealthyInput x = 
-    10 <= x ! conc <= 30 and
+    0 <= x ! conc <= 30 and
     38 <= x ! temp <= 40 and -- temps from dummy data based on a person being sick
     12 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
@@ -59,7 +56,7 @@ unhealthyInput x =
 
 unhealthyOutput : InputVector -> Bool
 -- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
-unhealthyOutput x = 10 <= ((normpk x) ! 0)/30 + (x ! conc) <= 50
+unhealthyOutput x = 10 <= ((normpk x) ! 0)/30 + (x ! conc) <= 30
 
 @property
 unhealthy: Bool
@@ -85,12 +82,26 @@ healthyOutput x = (normpk x) ! 0  == 0
 healthy: Bool
 healthy = forall x . healthyInput x => healthyOutput x
 
+@property
+safe: Bool
+safe = forall x . healthyInput x or unhealthyInput x => safeOutput x
+
 -------
 
 nextTemp : InputVector -> Real
 -- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
-nextTemp x = let y = normpk x in (x ! temp) + 1 * (0.08 -0.005*((x ! conc) + ((y ! 0)/30)) - 0.12 * ((x ! temp) - 37 )) 
+nextTemp x =
+         let y = normpk x in
+         (x ! temp) + 0.08 -0.005*(x ! conc) + ((y ! 0)/30) - 0.12 * ((x ! temp) - 37)
 
 @property
 tempDecr : Bool
-tempDecr = forall x. safeInput x => nextTemp x <= (x ! temp)
+tempDecr = forall x. unhealthyInput x => nextTemp x <= (x ! temp) - 0.01
+
+@property
+tempStable : Bool
+tempStable = forall x . healthyInput x => 36 <= nextTemp x <= 38
+
+@property
+test : Bool
+test = forall n . forall m . exists k . k <= 200 => n <= k < m => 
