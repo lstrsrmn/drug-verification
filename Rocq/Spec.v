@@ -4,15 +4,16 @@
 (*  - Rocq version: 9.0.0 *)
 (*  - Vehicle version: 0.22.0 *)
 
-Require Import mathcomp.ssreflect.ssrbool.
-Require Import mathcomp.algebra.ssralg.
-Require Import mathcomp.ssreflect.ssrnat.
-Require Import mathcomp.ssreflect.eqtype.
-Require Import mathcomp.ssreflect.order.
-Require Import mathcomp.ssreflect.fintype.
-Require Import mathcomp.ssreflect.seq.
-Require Import mathcomp.algebra.zmodp.
-Require Import mathcomp.reals.reals.
+From mathcomp Require Import all_boot all_algebra all_reals.
+(* Require Import mathcomp.ssreflect.ssrbool. *)
+(* Require Import mathcomp.algebra.ssralg. *)
+(* Require Import mathcomp.ssreflect.ssrnat. *)
+(* Require Import mathcomp.ssreflect.eqtype. *)
+(* Require Import mathcomp.ssreflect.order. *)
+(* Require Import mathcomp.ssreflect.fintype. *)
+(* Require Import mathcomp.ssreflect.seq. *)
+(* Require Import mathcomp.algebra.zmodp. *)
+(* Require Import mathcomp.reals.reals. *)
 Require Import vehicle.tensor.
 Open Scope ring_scope.
 Open Scope order_scope.

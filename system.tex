@@ -1,0 +1,50 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsmath}
+
+\title{medical case study maths}
+\author{}
+:q
+ 1\date{}
+
+\begin{document}
+
+\maketitle
+
+Constants:
+\begin{align}
+  ke = 0.1 & & \text{baseline elimination rate per hour} \\
+  Vd = 30 & & \text{baseline volume of distribution} \\
+  b_{temp}=0.002 & & \text{Drug effect on temp}\\
+  c_{wbc} = 0.02 & & \text{Drug effect on WBC}
+\end{align}
+Healthy ranges:
+\begin{align}
+  T_{norm}=(36,38)\\
+  WBC_{norm}=(4,12)\\
+  C_{max}=30
+\end{align}
+Efficiencies:
+\begin{align}
+  ke_{eff}=ke\times * 1- 0.004 * (age - 50) & & \text{Elimination efficiency}\\
+  vd_{eff}=vd * \frac{\text{weight}}{70} & & \text{Distribution efficiency}
+\end{align}
+
+Infection:
+\begin{align}
+  x_{n+1}=rx_n(1-x_n)
+\end{align}
+Homeostasis:
+\begin{align}
+  \frac{\Delta H_T}{\Delta t}=-H_T^c\left(T - 37.5^\circ C \right)\\
+  \frac{\Delta H_{wbc}}{\Delta t}=-H_{wbc}^c\left(WBC - 7\right)
+\end{align}
+
+System:
+\begin{align}
+  D_{t+1}=0.7*D_t
+  \frac{dC}{dt}=-ke_{eff}\times C + \frac{D_t}{vd_{eff}}\\
+  \frac{dT}{dt}=T_{eff}^*
+\end{align}
+
+\end{document}
