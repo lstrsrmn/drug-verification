@@ -6,4 +6,4 @@ Rocq/*
 !Rocq/*.v
 !Rocq/_CoqProject
 *.tex
-
+.*

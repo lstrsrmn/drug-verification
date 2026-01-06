@@ -412,6 +412,7 @@ Proof.
   by rewrite -IHn.
 Qed.
 
+(* should be generalised as much as possible *)
 Lemma continuous_sum {n} (f : 'I_n -> R -> R) : (forall i : 'I_n, continuous (f i)) -> continuous (fun t => \sum_(i < n) f i t).
 Proof.
   rewrite /=.
@@ -522,20 +523,16 @@ Proof.
   suff : (fun x => maxr (f x) (g x)) = f => [-> | ].
   by apply Hf.
   apply funext => x.
-  rewrite /maxr ifN //.
-  by rewrite H ltxx.
+  by rewrite H /maxr ifN // ltxx.
 Qed.
 
-
+(* Should be generalised and maybe added to mathcomp *)
 Lemma differentiable_max (f g : R -> R) (t : R) (H : f t <> g t) (Hf : differentiable f t) (Hg : differentiable g t) :
   differentiable (f \max g) t.
 Proof.
   case: (ltgtP (f t) (g t))=> // Hfg.
-  rewrite /Order.max_fun /maxr.
-  rewrite -derivable1_diffP.
-  rewrite /derivable.
-  rewrite Hfg.
-  have Hnear : \forall x \near nbhs 0^', (f (x%:A + t)%E < g (x%:A + t)%E)%R.
+  rewrite /Order.max_fun /maxr -derivable1_diffP /derivable Hfg.
+ have Hnear : \forall x \near nbhs 0^', (f (x%:A + t)%E < g (x%:A + t)%E)%R.
   near=> x.
   rewrite scaler1 -subr_lt0.
   rewrite (_ : f (x + t) - _ = ((f - g) \o shift t) x) => //.
@@ -554,7 +551,7 @@ Proof.
   by apply Hu.
   rewrite add0r /=.
   by apply:cvg_cst.
-  rewrite (_ : f (u n + t)%E @[n--> \oo] = (f \o shift t) (u n) @[n --> \oo]) => //=.
+  rewrite /=.
   apply: cvg_comp.
   by apply Hshift.
   move:Hf => /differentiable_continuous.
@@ -573,8 +570,7 @@ Proof.
   (* have stops here *)
   rewrite (_ : (h^-1 *: (((fun x : R => if (f x < g x)%R then g x else f x) \o shift t) h%:A - g t) @[h --> 0^']) = (fun x => x^-1 *: (shift (- g t) \o (g \o shift t)) x%:A) h @[h --> 0^']).
   move: Hg.
-  rewrite -derivable1_diffP /derivable /=.
-  by apply.
+  by rewrite -derivable1_diffP /derivable /=.
   apply/funext => /= x.
   apply/propext;
   split.
@@ -582,16 +578,14 @@ Proof.
   near=> x'.
   rewrite ifT //=.
   near: x'.
-  apply Hnear.
+  by apply Hnear.
   apply: near_eq_cvg.
   near=> x'.
   rewrite ifT //=.
   near: x'.
   by apply Hnear.
   (* end of first half *)
-  rewrite /Order.max_fun /maxr.
-  rewrite -derivable1_diffP.
-  rewrite /derivable.
+  rewrite /Order.max_fun /maxr -derivable1_diffP /derivable.
   have := Hfg.
   rewrite ltNge le_eqVlt negb_or => /andP [_ Hfg'].
   rewrite ifN //.
@@ -624,12 +618,10 @@ Proof.
   by apply.
   have Hshift : u n + t @[n --> \oo] --> t.
   rewrite -(add0r t).
-  apply:cvgD.
-  by apply Hu.
+  apply:(cvgD Hu).
   rewrite add0r /=.
   by apply:cvg_cst.
-  rewrite (_ : f (u n + t)%E @[n--> \oo] = (f \o shift t) (u n) @[n --> \oo]) => //=.
-  rewrite //=.
+  rewrite /=.
   apply: cvg_comp.
   by apply Hshift.
   move:Hf => /differentiable_continuous.
@@ -658,8 +650,7 @@ Qed.
 
 Lemma total_conc_diff_correct n (t : R) (Ds : n.-tuple R) (HDs : all [pred x | 0 <= x] Ds) (Ht : forall m : nat, m < n -> t <> ttd * m%:R) :
   (total_conc Ds)^`() t = total_conc_diff Ds t.
-  rewrite derive1E /total_conc.
-  rewrite derive_sum.
+  rewrite derive1E /total_conc derive_sum.
   rewrite /total_conc_diff.
   apply/eq_bigr => i _.
   case (ltgtP 0 (Concentration (tnth Ds i) (t - ttd * i %:R))) => /eqP /eqP H.
@@ -671,14 +662,12 @@ Lemma total_conc_diff_correct n (t : R) (Ds : n.-tuple R) (HDs : all [pred x | 0
   rewrite derivable1_diffP.
   apply/differentiable_max; [ apply/eqP; by rewrite eq_sym lt0r_neq0 // mulNr | apply/differentiable_cst | apply/conc_diff].
   rewrite derivable1_diffP.
-  apply differentiable_comp.
-  have := is_derive_shift t 1 (-ttd * i%:R).
-  by case.
+  apply differentiable_comp => //.
   apply/differentiable_max; [ apply/eqP; by rewrite eq_sym lt0r_neq0 // mulNr | apply/differentiable_cst | apply/conc_diff].
   rewrite ifF.
   rewrite -derive1E derive1_comp //.
   rewrite !derive1E derive_id mulr1 -derive1E derive1_comp //.
-  rewrite !derive1E /= deriveD // derive_id derive_cst addr0 mulr1 -derive1E max_diffl /=;[ by rewrite derive1_cst | by rewrite mulNr | by apply:cst_continuous | by apply conc_cont].
+  by rewrite !derive1E /= deriveD // derive_id derive_cst addr0 mulr1 -derive1E max_diffl /=;[ by rewrite derive1_cst | by rewrite mulNr | by apply:cst_continuous | by apply conc_cont].
   case: (boolP ((tnth Ds i) == 0)) => [/eqP -> | /eqP HDs_i];
   rewrite derivable1_diffP.
   rewrite conc_D0.
@@ -695,10 +684,8 @@ Lemma total_conc_diff_correct n (t : R) (Ds : n.-tuple R) (HDs : all [pred x | 0
   lra.
   case: (boolP ((tnth Ds i) == 0)) => /eqP HDs_i.
   rewrite -derive1E derive1_comp //.
-  rewrite derive1_id mulr1 derive1_comp.
+  rewrite derive1_id mulr1 derive1_comp => //.
   by rewrite max_diff_eq;[ by rewrite derive1E derive_cst mul0r ifF // -H ltxx | by rewrite HDs_i conc_D0 /=].
-  have := (is_derive_shift t 1 (- ttd * i%:R)).
-  by case.
   rewrite HDs_i conc_D0 derivable1_diffP.
   by apply differentiable_max_eq.
   rewrite HDs_i conc_D0 derivable1_diffP.
@@ -713,31 +700,30 @@ Lemma total_conc_diff_correct n (t : R) (Ds : n.-tuple R) (HDs : all [pred x | 0
   move=> /subr0_eq /expR_inj /eqP.
   rewrite -subr_eq0 => /= /eqP.
   rewrite addrC mulNr opprK -mulrDl=> /eqP.
-  rewrite mulrI_eq0 => [ /eqP | ];
+  by rewrite mulrI_eq0 => [ /eqP | ];
   [ lra
   | by apply mulfI].
   apply/unitrPr.
   exists (tnth Ds i * Ka / (Vd * (Ka - Ke)))^-1.
-  apply/mulfV/mulf_neq0;
+  by apply/mulfV/mulf_neq0;
   [ apply/mulf_neq0; [ by apply/eqP | by apply lt0r_neq0] |
   apply/invr_neq0/mulf_neq0; [by apply lt0r_neq0 | by apply Ke_n_Ka]].
   move=> i.
   apply/differentiable_comp.
-  rewrite -derivable1_diffP; apply/derivable_id.
+  by rewrite -derivable1_diffP; apply/derivable_id.
   apply/differentiable_comp => //.
   case: (boolP ((tnth Ds i) == 0)) => /eqP HDs_i.
   rewrite HDs_i conc_D0.
   by apply differentiable_max_eq.
-  apply/differentiable_max; [ | by apply/differentiable_cst | by apply/conc_diff].
+  rewrite max_swap.
+  apply/differentiable_max; [ | by apply/conc_diff | by apply/differentiable_cst].
   rewrite /Concentration.
-  symmetry.
   apply/eqP/mulf_neq0.
-  apply/mulf_neq0;
+  by apply/mulf_neq0;
   [ apply/mulf_neq0; [ by apply/eqP | by apply/lt0r_neq0]
   | apply/invr_neq0/mulf_neq0;[ by apply/lt0r_neq0 | by apply Ke_n_Ka]].
-  apply/eqP.
-  move=> /subr0_eq/expR_inj /= /eqP.
-  rewrite -subr_eq0 addrC mulNr opprK -mulrDl mulNr mulrI_eq0  => [/eqP/subr0_eq | ];
+  apply/eqP => /subr0_eq/expR_inj /= /eqP.
+  by rewrite -subr_eq0 addrC mulNr opprK -mulrDl mulNr mulrI_eq0  => [/eqP/subr0_eq | ];
   [ by apply/ (Ht i)/ltn_ord
   | by apply mulfI].
 Qed.
@@ -912,9 +898,7 @@ Proof.
   rewrite //= /total_conc big_ord1 /= (tnth_nth 0) /= mulr0 addr0 /maxr.
   case: (ltgtP 0 (Concentration (network initial) t)) => // _.
   have := (safe initial) => /andP [H H'].
-  apply/le_trans;
-  last first.
-  apply H'.
+  apply/(le_trans _ H').
   rewrite -(addr0 (Concentration (network initial) t)) addrC.
   apply/lerD => //.
   apply root_is_max => //=.
@@ -933,7 +917,7 @@ Proof.
   left.
   by rewrite conc_D0.
   rewrite unfold_n_dose_once /=.
-  set C' := (Concentration (network (total_conc (n_doses initial n) (ttd * n.+1%:R))) (t + (- ttd * n.+1%:R)%R)).
+  set C' := Concentration _ _.
   have : 0 <= C'.
   rewrite /C'.
   apply conc_non_neg;
@@ -943,9 +927,8 @@ Proof.
   by rewrite /maxr ifF ?ltxx ?addr0.
   rewrite /maxr => ->.
   rewrite /C'.
-  have := (safe (total_conc (n_doses initial n) (ttd * n.+1%:R))) => /andP [_].
-  apply: le_trans.
-  apply lerD.
+  have/andP [_] := (safe (total_conc (n_doses initial n) (ttd * n.+1%:R))).
+  apply/le_trans/lerD.
   apply (ler0_derive1_nincry (a := ttd *+ n.+1)).
   move=> x.
   rewrite in_itv /= => /andP [Hx _].
@@ -1015,3 +998,5 @@ Proof.
   apply:(le_trans _ IHn).
   by rewrite Ht_ttd.
 Qed.
+
+End Theory.
