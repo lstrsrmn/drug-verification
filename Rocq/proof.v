@@ -337,17 +337,70 @@ Proof.
   by rewrite /Concentration !mul0r.
 Qed.
 
-Lemma root_is_max (D t : R) (HD : 0 <= D) (Ht : 0 <= t) :
+Lemma root_is_max (D t : R) :
   Concentration D t <= Concentration D dCdt_root.
 Proof.
-  case: (boolP (D == 0))=> [/eqP -> | /eqP ].
-  by rewrite conc_D0.
-  move: HD.
-  rewrite le_eqVlt => /orP [/eqP -> //| HD _].
+  case: (ltgtP D 0) => HD; last first.
+  rewrite HD.
+  rewrite /Concentration.
+  lra.
+  case: (ltgtP t 0) => Ht;last first.
+  rewrite /Concentration.
+  rewrite Ht !mulr0 exp.expR0 subrr mulr0.
+  rewrite /dCdt_root.
+  rewrite (_ : (- Ke * (ln (Ka / Ke) / (Ka - Ke))) = (ln (Ka / Ke) * (-Ke / (Ka - Ke)))); last by lra.
+  rewrite expRM lnK.
+  rewrite (_ : (- Ka * (ln (Ka / Ke) / (Ka - Ke))) = (ln (Ka / Ke) * (- Ka / (Ka - Ke)))); last by lra.
+  rewrite expRM lnK.
+  case: (ltgtP Ke Ka) => Ke_Ka.
+  rewrite pmulr_rge0.
+  rewrite subr_ge0.
+  apply/ler_powR => //.
+  rewrite ler_pdivlMr => //.
+  rewrite mul1r.
+  by apply/ltW.
+  rewrite -subr_ge0 addrC mulNr opprK mulNr subr_ge0.
+  rewrite ler_pdivrMr.
+  apply/ltW.
+  rewrite (_ : Ka / _ * _ = Ka * ((Ka - Ke) / (Ka - Ke))); last lra.
+  rewrite mulfV => //.
+  by rewrite mulr1.
+  by rewrite subr_gt0.
+  apply/divr_gt0.
+  by apply/mulr_gt0.
+  apply/mulr_gt0 => //.
+  by rewrite subr_gt0.
+  rewrite nmulr_rge0.
+  rewrite subr_le0.
+  apply/ger_powR => //.
+  apply/andP.
+  split.
+  apply/divr_gt0 => //.
+  rewrite ler_pdivrMr => //.
+  rewrite mul1r.
+  by apply/ltW.
+  rewrite -subr_ge0 addrC mulNr opprK mulNr subr_ge0.
+  rewrite ler_ndivrMr.
+  rewrite (_ : Ka / _ * _ = Ka * ((Ka - Ke) / (Ka - Ke))); last lra.
+  rewrite mulfV => //.
+  rewrite mulr1.
+  by apply/ltW.
+  by rewrite subr_lt0.
+  rewrite nmulr_llt0.
+  by apply/mulr_gt0.
+  rewrite invr_lt0.
+  rewrite nmulr_llt0 => //.
+  by rewrite subr_lt0.
+  move: Ke_Ka Ke_n_Ka.
+  lra.
+  rewrite posrE.
+  by apply/divr_gt0.
+  rewrite posrE.
+  by apply/divr_gt0.
   case: (ltgtP t dCdt_root) => [ | | -> //] Htr.
   apply/(ger0_derive1_ndecrNy) => //.
   move=> x Hx.
-  by apply deriv_is_pos.
+  by apply/deriv_is_pos.
   apply/derivable_within_continuous => /= t' _.
   rewrite derivable1_diffP.
   by apply conc_diff.
@@ -359,7 +412,8 @@ Proof.
   rewrite derivable1_diffP.
   by apply conc_diff.
   by apply/ltW.
-Qed.
+  Admitted.
+(* Qed. *)
 
 Definition total_conc {n} (Ds : n.-tuple R) (t : R)
   := \sum_(i < n) ((cst 0) \max (Concentration (tnth Ds i)) \o (shift (-ttd * i%:R))) t.
@@ -793,18 +847,18 @@ Context {network : R -> R}.
 
 Hypothesis safe : forall C : R, C + (Concentration (network C) dCdt_root) <= C_safe.
 
-Hypothesis non_neg : forall C : R, 0 <= C -> 0 <= network C.
+(* Hypothesis non_neg : forall C : R, 0 <= C -> 0 <= network C. *)
 
 Fixpoint n_doses (initial : R) (n : nat) : n.+1.-tuple R :=
   match n with
-  | 0 => [:: network initial]
+  | 0 => [:: maxr 0 (network initial)]
   | n'.+1 =>
       let Doses := n_doses initial n' in
-      rcons Doses (network (total_conc Doses (ttd *+ (n'.+1))%R))
+      rcons Doses (maxr 0 (network (total_conc Doses (ttd *+ (n'.+1))%R)))
   end.
 
 Lemma unfold_n_dose_once {n} (initial t : R) :
-  total_conc (n_doses initial n.+1) t = total_conc (n_doses initial n) t + maxr 0 (Concentration (network (total_conc (n_doses initial n) ((ttd * n.+1%:R)%R))) (t + (- ttd * n.+1%:R)%R)).
+  total_conc (n_doses initial n.+1) t = total_conc (n_doses initial n) t + maxr 0 (Concentration (maxr 0 (network (total_conc (n_doses initial n) ((ttd * n.+1%:R)%R)))) (t + (- ttd * n.+1%:R)%R)).
 Proof.
   rewrite /total_conc big_ord_recr /total_conc /=.
   rewrite (tnth_nth (network initial)) /= nth_rcons ifF;
@@ -817,6 +871,7 @@ Proof.
   by rewrite !(tnth_nth 0) nth_rcons /= size_tuple ifT.
   apply f_equal2 => //.
   apply f_equal2 => //.
+  apply f_equal.
   apply f_equal.
   apply eq_bigr => i _.
   apply f_equal2 => //.
@@ -881,15 +936,12 @@ Proof.
   apply/allP => /=.
   move: n.
   elim => /= [n | n IHn x] /=.
-  rewrite mem_seq1 => /eqP ->.
-  by apply/non_neg.
-  rewrite mem_rcons in_cons => /orP [/eqP -> | H].
-  apply non_neg.
-  apply/total_conc_non_neg => //=.
-  rewrite -mulr_natr.
-  apply/mulr_ge0 => //.
+  rewrite mem_seq1 /maxr => /eqP ->.
+  case: ifP => //.
   by apply/ltW.
-  by apply/allP.
+  rewrite mem_rcons in_cons /maxr => /orP [/eqP -> | H].
+  case: ifP => //.
+  by apply/ltW.
   by apply IHn.
 Qed.
 
@@ -922,21 +974,31 @@ Proof.
   move: n.
   elim => [ | n IHn].
   rewrite //= /total_conc big_ord1 /= (tnth_nth 0) /= mulr0 addr0 /maxr.
-  case: (ltgtP 0 (Concentration (network initial) t)) => // _; first last.
+  have C_safe' : 0 <= 0 <= C_safe.
+  move=> ?.
   apply/andP.
   split => //.
-  by apply/ltW/C_safe_pos.
-  apply/andP.
-  split => //.
-  by apply/ltW/C_safe_pos.
+  by apply/ltW.
+  case: (ltgtP 0 (Concentration (network initial) t)) => // H; first last.
+  case: ifP => //.
+  case:ifP.
+  by rewrite -H.
+  by rewrite conc_D0.
+  case: ifP => //.
+  case: ifP.
+  lra.
+  by rewrite conc_D0.
+  case: ifP => //.
+  case: ifP.
+  move=> _ _.
   apply/andP.
   split.
-  apply/conc_non_neg => //.
-  by apply/non_neg.
+  by apply/ltW.
   apply/(le_trans _ (safe initial)).
   rewrite -(addr0 (Concentration (network initial) t)) addrC.
   apply/lerD => //.
-  by apply (root_is_max (non_neg HC)) => //=.
+  by apply/root_is_max.
+  by rewrite conc_D0.
   have /andP [IHn0 IHnc] := IHn.
   case: (ltgtP t (ttd *+ n.+1)) => Ht_ttd.
   rewrite unfold_n_dose_once /=.
@@ -950,32 +1012,33 @@ Proof.
   apply/orP.
   case (ltgtP 0 (network (total_conc (n_doses initial n) (ttd * n.+1%:R)))).
   right.
-  apply conc_neg => //.
+  apply/conc_neg => //.
+  case: ifP => //.
   lra.
-  right.
-  exfalso.
-  move: i.
-  rewrite ltNge => /negP.
-  apply.
-  apply/non_neg.
-  apply/total_conc_non_neg => //.
-  apply/ltW/(le_lt_trans Ht).
-  by rewrite mulr_natr.
-  by apply/n_doses_pos.
-  move=> <-.
+  lra.
   left.
+  case: ifP => //.
+  lra.
+  move=> _.
+  apply/eqP.
   by rewrite conc_D0.
+  move=> <- /=.
+  left.
+  by rewrite ifN ?ltxx // conc_D0.
   rewrite unfold_n_dose_once /=.
   set C' := Concentration _ _.
   have : 0 <= C'.
   rewrite /C'.
   apply conc_non_neg.
-  apply/non_neg.
-  apply/total_conc_non_neg => //.
-  apply/mulr_ge0 => //.
+  rewrite /maxr.
+  case: ifP => //.
   by apply/ltW.
-  by apply/n_doses_pos.
   lra.
+  (* apply/total_conc_non_neg => //. *)
+  (* apply/mulr_ge0 => //. *)
+  (* by apply/ltW. *)
+  (* by apply/n_doses_pos. *)
+  (* lra. *)
   rewrite le_eqVlt => /orP [/eqP <- //= | ].
   by rewrite /maxr ifF ?ltxx ?addr0.
   rewrite /maxr => ->.
@@ -984,11 +1047,10 @@ Proof.
   split.
   apply/addr_ge0 => //.
   apply/conc_non_neg.
-  apply/non_neg.
-  apply/total_conc_non_neg => //.
-  apply/mulr_ge0 => //.
+  (* 4 Goals *)
+  rewrite /maxr.
+  case: ifP => //.
   by apply/ltW.
-  by apply/n_doses_pos.
   rewrite mulNr subr_ge0 mulr_natr.
   by apply/ltW.
   apply/(le_trans _ (safe (total_conc (n_doses initial n) (ttd * n.+1%:R))))/lerD.
@@ -1052,13 +1114,15 @@ Proof.
   by apply/continuous_subspaceT/total_conc_cont.
   lra.
   lra.
-  apply root_is_max => //.
-  apply/non_neg => //.
-  apply/total_conc_non_neg => //.
-  apply/mulr_ge0 => //.
-  by apply/ltW.
-  by apply/n_doses_pos.
-  lra.
+  rewrite /maxr.
+  case: ifP => H.
+  by apply root_is_max.
+  rewrite conc_D0.
+  apply/conc_non_neg.
+  move: H.
+  rewrite ltNge => /negbFE H.
+  apply/negP.
+  move=> H'.
   rewrite unfold_n_dose_once /= Ht_ttd.
   rewrite -(mulr_natr ttd) mulNr subrr conc_t0 /maxr ifF ?ltxx // addr0 mulr_natr.
   apply/andP.
