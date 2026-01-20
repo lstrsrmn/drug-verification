@@ -8,6 +8,7 @@ age = 3
 weight = 4
 sex = 5
 
+
 type OutputVector= Tensor Real [1]
 
 meanScalingValues : UnnormalisedInputVector
@@ -26,82 +27,90 @@ pk : InputVector -> OutputVector
 normpk : UnnormalisedInputVector -> OutputVector
 normpk x = pk (x)
 
+@parameter
+Ka : Real
+
+@property
+Ka_pos : Bool
+Ka_pos = 0 < Ka
+
+@parameter
+Ke : Real
+
+@property
+Ke_pos : Bool
+Ke_pos = 0 < Ke
+
+@property
+Ke_n_Ka : Bool
+Ke_n_Ka = Ka != Ke
+
+@parameter
+Vd : Real
+
+@property
+Vd_pos : Bool
+Vd_pos = 0 < Vd
+
+@parameter
+C_safe : Real
+
+@property
+C_safe_pos : Bool
+C_safe_pos = 0 < C_safe
+
+@parameter
+ttd : Real
+
+@property
+ttd_pos : Bool
+ttd_pos = 0 < ttd
+
+@parameter
+Ka_over : Real
+
+@parameter
+Ka_under : Real
+
+@parameter
+Ke_over : Real
+
+@parameter
+Ke_under : Real
+
+@parameter
+root_over : Real
+
+@property
+root_over_ttd : Bool
+root_over_ttd = root_over < ttd
+
 safeInput : InputVector -> Bool
 safeInput x = 
-    0 <= x ! conc <= 30 and
+    0 <= x ! conc <= C_safe and
     36.5 <= x ! temp <= 40 and -- temps from dummy data based on a person being sick
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
     50 <= x ! weight <= 100 and
-    ((x ! sex == 1 ) or (x ! sex == 0))
+    0 <= x ! sex <= 1
+    -- ((x ! sex == 1 ) or (x ! sex == 0))
     -- 0 <= x ! sex <= 1
 
 safeOutput : InputVector -> Bool
--- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
-safeOutput x = 0 <= ((normpk x) ! 0)/30 + (x ! conc) <= 30
+safeOutput x = let y = (x ! conc) + ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
+           if Ka < Ke
+           then y * (Ke_over - Ka_under) <= C_safe
+           else y * (Ke_under - Ka_over) <= C_safe
 
-
-
----------
-
-unhealthyInput : InputVector -> Bool
-unhealthyInput x = 
-    0 <= x ! conc <= 30 and
-    38 <= x ! temp <= 40 and -- temps from dummy data based on a person being sick
-    12 <= x ! wbc <= 20 and
-    18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100 and
-    -- 0 <= x ! sex <= 1
-    ((x ! sex == 1 ) or (x ! sex == 0))  
-
-unhealthyOutput : InputVector -> Bool
--- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
-unhealthyOutput x = 10 <= ((normpk x) ! 0)/30 + (x ! conc) <= 30
+-- y * ((Ka/Ke)^(-Ke/(Ka-Ke)) - (Ka/Ke)^(-Ka/(Ka-Ke))) <= C_safe
 
 @property
-unhealthy: Bool
-unhealthy = forall x . unhealthyInput x => unhealthyOutput x
+safe : Bool
+safe = forall x . safeInput x => safeOutput x
 
----------
-
-healthyInput : InputVector -> Bool
-healthyInput x = 
-    0 <= x ! conc <= 30 and
-    36 <= x ! temp <= 38 and -- temps from dummy data based on a person being sick
-    4 <= x ! wbc <= 12 and
-    18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100 and
-    -- 0 <= x ! sex <= 1
-    ((x ! sex == 1 ) or (x ! sex == 0))  
-
-healthyOutput : InputVector -> Bool
--- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
-healthyOutput x = (normpk x) ! 0  == 0
+nonNegOutput : InputVector -> Bool
+nonNegOutput x = 0 <= (normpk x) ! 0
 
 @property
-healthy: Bool
-healthy = forall x . healthyInput x => healthyOutput x
-
-@property
-safe: Bool
-safe = forall x . healthyInput x or unhealthyInput x => safeOutput x
-
--------
-
-nextTemp : InputVector -> Real
--- safeOutput x = let y = normpk x in 0 <= (x ! conc) + ((y ! 0)/30) <= 30
-nextTemp x =
-         let y = normpk x in
-         (x ! temp) + 0.08 -0.005*(x ! conc) + ((y ! 0)/30) - 0.12 * ((x ! temp) - 37)
-
-@property
-tempDecr : Bool
-tempDecr = forall x. unhealthyInput x => nextTemp x <= (x ! temp) - 0.01
-
-@property
-tempStable : Bool
-tempStable = forall x . healthyInput x => 36 <= nextTemp x <= 38
-
-@property
-test : Bool
-test = forall n . forall m . exists k . k <= 200 => n <= k < m => 
+nonNeg : Bool
+nonNeg = forall x . safeInput x => nonNegOutput x
