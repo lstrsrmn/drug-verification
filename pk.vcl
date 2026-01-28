@@ -93,16 +93,14 @@ safeInput x =
     18 <= x ! age <= 89 and
     50 <= x ! weight <= 100 and
     0 <= x ! sex <= 1
-    -- ((x ! sex == 1 ) or (x ! sex == 0))
-    -- 0 <= x ! sex <= 1
 
 safeOutput : InputVector -> Bool
-safeOutput x = let y = (x ! conc) + ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
+safeOutput x = let y =  ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
            if Ka < Ke
-           then y * (Ke_over - Ka_under) <= C_safe
-           else y * (Ke_under - Ka_over) <= C_safe
+           then (x ! conc) + y * (Ke_under - Ka_over) <= C_safe
+           else (x ! conc) + y * (Ke_over - Ka_under) <= C_safe
 
--- y * ((Ka/Ke)^(-Ke/(Ka-Ke)) - (Ka/Ke)^(-Ka/(Ka-Ke))) <= C_safe
+-- C + y * ((Ka/Ke)^(-Ke/(Ka-Ke)) - (Ka/Ke)^(-Ka/(Ka-Ke))) <= C_safe
 
 @property
 safe : Bool

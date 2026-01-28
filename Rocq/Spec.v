@@ -13,7 +13,6 @@ Require Import vehicle.tensor.
 Open Scope ring_scope.
 Open Scope order_scope.
 
-(* Parameter R : realType. *)
 Notation R := Rdefinitions.R.
 
 Definition UnnormalisedInputVector : Type := 'nT[R]_(6%N :: nil).
@@ -74,7 +73,7 @@ Axiom root_over_ttd : root_over < ttd.
 
 Definition safeInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
 
-Definition safeOutput (x : InputVector) : Prop := let y := x^^conc + (((normpk x)^^0 * Ka) / (Vd * Ka - Ke)) in if Ka < Ke then (y * Ke_over - Ka_under) <= C_safe else (y * Ke_under - Ka_over) <= C_safe.
+Definition safeOutput (x : InputVector) : Prop := let y := ((normpk x)^^0 * Ka) / (Vd * Ka - Ke) in if Ka < Ke then (x^^conc + (y * Ke_under - Ka_over)) <= C_safe else (x^^conc + (y * Ke_over - Ka_under)) <= C_safe.
 
 Axiom safe : forall x, safeInput x -> safeOutput x.
 
