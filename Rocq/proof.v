@@ -1307,237 +1307,233 @@ Definition safeOutput (x : state) :=
 
 Lemma safe x : safeInput x -> safeOutput (tuple_to_state (tuple_of_ntensor x)).
 Proof.
-  move=> safeInp.
-  move: (safeInp).
-  rewrite /safeInput => [[/andP Hc] [/andP Ht] [/andP HW] [/andP Ha] [/andP Hw]
+move=> safeInp.
+move: (safeInp).
+rewrite /safeInput => [[/andP Hc] [/andP Ht] [/andP HW] [/andP Ha] [/andP Hw]
                         /andP Hs].
-  set s := tuple_to_state (tuple_of_ntensor x).
-  have Hsx : x = ntensor_of_tuple (state_to_tuple s).
+set s := tuple_to_state (tuple_of_ntensor x).
+have Hsx : x = ntensor_of_tuple (state_to_tuple s).
   by rewrite /s tuple_to_stateK tuple_of_ntensorK.
-  case: (boolP ((C s) < (C_safe.[::] - 1))%R)=>Hc'.
+case: (boolP ((C s) < (C_safe.[::] * (99/100)%coqR))%R)=>Hc'.
   have /safeFar : safeFarInput x.
-  rewrite /safeFarInput.
-  split.
-  split.
-  by move: Hc => /andP[c _].
-  apply/ltW.
-  rewrite -tensor_nil_ltP tensor_nilD tensor_nilN [(const_t 1%coqR).[::]]const_tK.
-  by rewrite Hsx ntensor_of_tupleE (tnth_nth 0).
-  split.
-  by apply/andP.
-  split.
-  by apply/andP.
-  split.
-  by apply/andP.
-  split.
-  by apply/andP.
-  by apply/andP.
+    rewrite /safeFarInput.
+    split.
+      split.
+        by move: Hc => /andP[c _].
+      apply/ltW.
+      rewrite -tensor_nil_ltP tensor_nilM [(const_t (_ / _)%coqR).[::]]const_tK.
+      by rewrite Hsx ntensor_of_tupleE (tnth_nth 0).
+    split.
+      by apply/andP.
+    split.
+      by apply/andP.
+    split.
+      by apply/andP.
+    split.
+      by apply/andP.
+    by apply/andP.
   rewrite /safeFarOutput.
   case: ifP => Ke_Ka /ltW H.
-  apply/RleP/le_trans; last first.
-  rewrite -tensor_nil_leP in H.
-  by apply: H.
-  rewrite Hsx vcl_fix -!Hsx tensor_nilD.
-  apply/lerD.
-  by rewrite Hsx ntensor_of_tupleE (tnth_nth 0).
-  rewrite /safeOutput /Concentration.
-  rewrite !tensor_nilM tensor_nilV tensor_nilM !tensor_nilD !tensor_nilN.
-  rewrite /error.
-  case:ifP => He.
-  rewrite -lerN2 -!mulNr -lerN2 -!mulrN.
-  apply/ler_pM.
-  by rewrite oppr0 !mul0r.
-  rewrite opprB subr_ge0 ler_expR -subr_ge0 addrC !mulNr opprK subr_ge0.
-  apply/ler_pM => //.
-  apply/ltW/const_t_ltP.
-  by rewrite tensor_nilK Ka_pos.
-  rewrite /dCdt_root.
-  apply/mulr_le0.
-  apply/ln_le0.
-  rewrite ler_pdivrMr ?mul1r ?tensor_nil_leP.
-  by apply/ltW.
-  by rewrite const_t_ltP tensor_nilK Ke_pos.
-  rewrite invr_le0 subr_le0 tensor_nil_leP.
-  by apply/ltW.
-  by apply/ltW/tensor_nil_ltP.
-  rewrite !mulNr -!mulrN.
-  apply/ler_pM=> //.
-  by rewrite mul0r.
-  rewrite -oppr0 lerN2.
-  rewrite invr_le0.
-  apply/mulr_ge0_le0.
-  apply/ltW.
-  by rewrite const_t_ltP tensor_nilK Vd_pos.
-  rewrite subr_le0 tensor_nil_leP.
-  by apply/ltW.
-  apply/ler_pM => //.
-  rewrite const_t_leP tensor_nilK.
-  by apply/ltW/Ka_pos.
-  rewrite const_t_leP tensor_nilK.
-  by apply/ltW/nonNeg.
-  rewrite lerN2.
-  rewrite /dCdt_root -!RlnE.
-  rewrite -!RexpE -!RmultE -!RoppE -!RinvE -!RplusE !const_tK.
-  apply/RleP.
-  interval.
-  apply/RltP.
-  apply/divr_gt0.
-  by rewrite const_t_ltP tensor_nilK Ka_pos.
-  by rewrite const_t_ltP tensor_nilK Ke_pos.
-  apply/ler_nmul_pos.
-  apply/mulr_ge0_le0.
-  apply/mulr_ge0.
-  apply/ltW.
-  rewrite const_t_ltP tensor_nilK.
-  by apply/nonNeg.
-  apply/ltW.
-  rewrite const_t_ltP const_tK.
-  apply/Ka_pos.
-  rewrite invr_le0.
-  apply/mulr_ge0_le0.
-  apply/ltW.
-  rewrite const_t_ltP const_tK.
-  by apply/Vd_pos.
-  rewrite subr_le0.
-  apply/ltW.
-  by rewrite -tensor_nil_ltP in Ke_Ka.
-  apply/lerD.
-  rewrite !const_tK /dCdt_root -RexpE -RlnE -!RmultE -!RinvE.
-  rewrite -!RoppE -!RplusE.
-  apply/RleP.
-  interval.
-  interval.
-  rewrite !const_tK /dCdt_root -RexpE -RlnE -!RmultE -!RinvE.
-  rewrite -!RoppE -!RplusE.
-  apply/RleP.
-  interval.
-  interval.
+    apply/RleP/le_trans; last first.
+      rewrite -tensor_nil_leP in H.
+      by apply: H.
+    rewrite Hsx vcl_fix -!Hsx tensor_nilD.
+    apply/lerD.
+      by rewrite Hsx ntensor_of_tupleE (tnth_nth 0).
+    rewrite /safeOutput /Concentration.
+    rewrite !tensor_nilM tensor_nilV tensor_nilM !tensor_nilD !tensor_nilN.
+    rewrite /error.
+    case:ifP => He.
+      rewrite -lerN2 -!mulNr -lerN2 -!mulrN.
+      apply/ler_pM.
+      - by rewrite oppr0 !mul0r.
+      - rewrite opprB subr_ge0 ler_expR -subr_ge0 addrC !mulNr opprK subr_ge0.
+        apply/ler_pM => //.
+        + apply/ltW/const_t_ltP.
+          by rewrite tensor_nilK Ka_pos.
+        + rewrite /dCdt_root.
+          apply/mulr_le0.
+            apply/ln_le0.
+            rewrite ler_pdivrMr ?mul1r ?tensor_nil_leP.
+              by apply/ltW.
+            by rewrite const_t_ltP tensor_nilK Ke_pos.
+          rewrite invr_le0 subr_le0 tensor_nil_leP.
+          by apply/ltW.
+        + by apply/ltW/tensor_nil_ltP.
+      - rewrite !mulNr -!mulrN.
+        apply/ler_pM=> //.
+        + by rewrite mul0r.
+        + rewrite -oppr0 lerN2 invr_le0.
+          apply/mulr_ge0_le0.
+            apply/ltW.
+            by rewrite const_t_ltP tensor_nilK Vd_pos.
+          rewrite subr_le0 tensor_nil_leP.
+          by apply/ltW.
+        + apply/ler_pM => //.
+            rewrite const_t_leP tensor_nilK.
+            by apply/ltW/Ka_pos.
+          rewrite const_t_leP tensor_nilK.
+          by apply/ltW/nonNeg.
+      - rewrite lerN2 /dCdt_root -!RlnE.
+          rewrite -!RexpE -!RmultE -!RoppE -!RinvE -!RplusE !const_tK.
+          apply/RleP.
+          interval.
+        apply/RltP.
+        apply/divr_gt0.
+          by rewrite const_t_ltP tensor_nilK Ka_pos.
+        by rewrite const_t_ltP tensor_nilK Ke_pos.
+    apply/ler_nmul_pos.
+      apply/mulr_ge0_le0.
+        apply/mulr_ge0.
+          apply/ltW.
+          rewrite const_t_ltP tensor_nilK.
+          by apply/nonNeg.
+        apply/ltW.
+        rewrite const_t_ltP const_tK.
+        by apply/Ka_pos.
+      rewrite invr_le0.
+      apply/mulr_ge0_le0.
+        apply/ltW.
+        rewrite const_t_ltP const_tK.
+        by apply/Vd_pos.
+      rewrite subr_le0.
+      apply/ltW.
+      by rewrite -tensor_nil_ltP in Ke_Ka.
+    apply/lerD.
+      rewrite !const_tK /dCdt_root -RexpE -RlnE -!RmultE -!RinvE.
+        rewrite -!RoppE -!RplusE.
+        apply/RleP.
+        interval.
+      interval.
+    rewrite !const_tK /dCdt_root -RexpE -RlnE -!RmultE -!RinvE.
+      rewrite -!RoppE -!RplusE.
+      apply/RleP.
+      interval.
+    interval.
   rewrite /safeOutput /Concentration.
   apply/RleP/le_trans; last first.
-  rewrite -tensor_nil_leP in H.
-  by apply: H.
+    rewrite -tensor_nil_leP in H.
+    by apply: H.
   rewrite Hsx vcl_fix' -!Hsx tensor_nilD.
   apply/lerD.
-  by rewrite Hsx ntensor_of_tupleE (tnth_nth 0).
+    by rewrite Hsx ntensor_of_tupleE (tnth_nth 0).
   rewrite !tensor_nilM tensor_nilV tensor_nilM !tensor_nilD !tensor_nilN.
   rewrite /error.
   case: ifP => He.
-  apply/ler_pM.
-  by rewrite !mul0r.
-  rewrite subr_ge0 ler_expR -subr_ge0 addrC !mulNr opprK subr_ge0 //.
-  apply/ler_pM => //.
-  apply/ltW/const_t_ltP.
-  by rewrite tensor_nilK Ke_pos.
-  rewrite /dCdt_root.
-  apply/divr_ge0.
-  apply/ln_ge0.
-  rewrite ler_pdivlMr.
-  rewrite mul1r const_t_leP !tensor_nilK.
-  move/negP: Ke_Ka.
-  rewrite -tensor_nil_ltP ltNge => /negP /negPn.
-  by rewrite -tensor_nil_leP.
-  by rewrite const_t_ltP tensor_nilK Ke_pos.
-  rewrite subr_ge0.
-  move/negP: Ke_Ka.
-  by rewrite -tensor_nil_ltP ltNge => /negP /negPn.
-  move/negP: Ke_Ka.
-  by rewrite -tensor_nil_ltP ltNge => /negP /negPn.
-  apply/ler_pM => //.
-  by rewrite mul0r.
-  rewrite invr_ge0.
-  apply/mulr_ge0.
-  apply/ltW/const_t_ltP.
-  by rewrite tensor_nilK Vd_pos.
-  rewrite subr_ge0.
-  rewrite -[(_ <= _)%R]negbK -ltNge.
-  by apply/negP/tensor_nil_ltP/negP/negPf.
-  apply/ler_pM => //.
-  apply/ltW/const_t_ltP.
-  by rewrite tensor_nilK Ka_pos.
-  apply/ltW/const_t_ltP.
-  rewrite tensor_nilK.
-  by apply/nonNeg.
-  apply/lerD.
-  rewrite /dCdt_root -RlnE.
-  rewrite -!RexpE -!RmultE -!RoppE !const_tK -RplusE -!RinvE.
-  apply/RleP.
-  interval.
-  apply/RltP.
-  by apply/divr_gt0;
-  rewrite const_t_ltP tensor_nilK ?Ka_pos ?Ke_pos.
-  rewrite -subr_ge0 addrC !mulNr opprK subr_ge0.
-  rewrite /dCdt_root -RlnE.
-  rewrite -!RexpE -!RmultE -!RoppE !const_tK -RplusE -!RinvE.
-  apply/RleP.
-  interval.
-  apply/RltP.
-  by apply/divr_gt0;
-  rewrite const_t_ltP tensor_nilK ?Ka_pos ?Ke_pos.
+    apply/ler_pM.
+    - by rewrite !mul0r.
+    - rewrite subr_ge0 ler_expR -subr_ge0 addrC !mulNr opprK subr_ge0 //.
+      apply/ler_pM => //.
+      + apply/ltW/const_t_ltP.
+        by rewrite tensor_nilK Ke_pos.
+      + rewrite /dCdt_root.
+        apply/divr_ge0.
+          apply/ln_ge0.
+          rewrite ler_pdivlMr.
+            rewrite mul1r const_t_leP !tensor_nilK.
+            move/negP: Ke_Ka.
+            rewrite -tensor_nil_ltP ltNge => /negP /negPn.
+            by rewrite -tensor_nil_leP.
+          by rewrite const_t_ltP tensor_nilK Ke_pos.
+        rewrite subr_ge0.
+        move/negP: Ke_Ka.
+        by rewrite -tensor_nil_ltP ltNge => /negP /negPn.
+      + move/negP: Ke_Ka.
+        by rewrite -tensor_nil_ltP ltNge => /negP /negPn.
+    - apply/ler_pM => //.
+      + by rewrite mul0r.
+      + rewrite invr_ge0.
+        apply/mulr_ge0.
+          apply/ltW/const_t_ltP.
+          by rewrite tensor_nilK Vd_pos.
+        rewrite subr_ge0.
+        rewrite -[(_ <= _)%R]negbK -ltNge.
+        by apply/negP/tensor_nil_ltP/negP/negPf.
+      + apply/ler_pM => //.
+          apply/ltW/const_t_ltP.
+          by rewrite tensor_nilK Ka_pos.
+        apply/ltW/const_t_ltP.
+        rewrite tensor_nilK.
+        by apply/nonNeg.
+    - apply/lerD.
+        rewrite /dCdt_root -RlnE.
+          rewrite -!RexpE -!RmultE -!RoppE !const_tK -RplusE -!RinvE.
+          apply/RleP.
+          interval.
+        apply/RltP.
+        by apply/divr_gt0;
+        rewrite const_t_ltP tensor_nilK ?Ka_pos ?Ke_pos.
+      rewrite -subr_ge0 addrC !mulNr opprK subr_ge0.
+      rewrite /dCdt_root -RlnE.
+        rewrite -!RexpE -!RmultE -!RoppE !const_tK -RplusE -!RinvE.
+        apply/RleP.
+        interval.
+      apply/RltP.
+      by apply/divr_gt0;
+      rewrite const_t_ltP tensor_nilK ?Ka_pos ?Ke_pos.
   apply/ler_pmul_pos.
-  apply/mulr_ge0.
-  apply/mulr_ge0.
-  rewrite const_t_leP tensor_nilK.
-  by apply/ltW/nonNeg.
-  apply/ltW.
-  by rewrite const_t_ltP tensor_nilK Ka_pos.
-  rewrite invr_ge0.
-  apply/mulr_ge0.
-  apply/ltW.
-  by rewrite const_t_ltP tensor_nilK Vd_pos.
-  rewrite subr_ge0 tensor_nil_leP.
-  have : ~~ (Ka < Ke)%R by apply/negPf.
-  move=> /negP.
-  rewrite -tensor_nil_ltP.
-  rewrite ltNge => /negP /negPn.
-  by rewrite tensor_nil_leP.
+    apply/mulr_ge0.
+      apply/mulr_ge0.
+        rewrite const_t_leP tensor_nilK.
+        by apply/ltW/nonNeg.
+      apply/ltW.
+      by rewrite const_t_ltP tensor_nilK Ka_pos.
+    rewrite invr_ge0.
+    apply/mulr_ge0.
+      apply/ltW.
+      by rewrite const_t_ltP tensor_nilK Vd_pos.
+    rewrite subr_ge0 tensor_nil_leP.
+    have : ~~ (Ka < Ke)%R by apply/negPf.
+    move=> /negP.
+    rewrite -tensor_nil_ltP.
+    rewrite ltNge => /negP /negPn.
+    by rewrite tensor_nil_leP.
   apply/lerD.
+    rewrite /dCdt_root -RlnE.
+      rewrite -RexpE /dCdt_root !const_tK.
+      rewrite -!RmultE -!RoppE -!RinvE -!RplusE.
+      apply/RleP.
+      interval.
+    apply/RltP.
+    apply/divr_gt0;
+    rewrite const_t_ltP const_tK.
+      by apply/Ka_pos.
+    by apply/Ke_pos.
   rewrite /dCdt_root -RlnE.
-  rewrite -RexpE /dCdt_root !const_tK.
-  rewrite -!RmultE -!RoppE -!RinvE -!RplusE.
-  apply/RleP.
-  interval.
+    rewrite -RexpE /dCdt_root !const_tK.
+    rewrite -!RmultE -!RoppE -!RinvE -!RplusE.
+    apply/RleP.
+    interval.
   apply/RltP.
   apply/divr_gt0;
   rewrite const_t_ltP const_tK.
-  by apply/Ka_pos.
+    by apply/Ka_pos.
   by apply/Ke_pos.
-  rewrite /dCdt_root -RlnE.
-  rewrite -RexpE /dCdt_root !const_tK.
-  rewrite -!RmultE -!RoppE -!RinvE -!RplusE.
-  apply/RleP.
-  interval.
-  apply/RltP.
-  apply/divr_gt0;
-  rewrite const_t_ltP const_tK.
-  by apply/Ka_pos.
-  by apply/Ke_pos.
-  rewrite /safeOutput -Hsx.
-  suff -> : (error (normpk x)^^=0%R) = 0%R.
-  rewrite conc_D0.
-  rewrite -(addr0 (C_safe.[::])).
+rewrite /safeOutput -Hsx.
+suff -> : (error (normpk x)^^=0%R) = 0%R.
+  rewrite conc_D0 -(addr0 (C_safe.[::])).
   apply/RleP/lerD => //.
   move/andP: Hc => [_ /tensor_nil_leP].
   by rewrite Hsx ntensor_of_tupleE (tnth_nth 0).
-  rewrite /error ifT //.
-  rewrite tensor_nil_ltP.
-  apply/safeNear.
-  rewrite /safeNearInput.
+rewrite /error ifT //.
+rewrite tensor_nil_ltP.
+apply/safeNear.
+rewrite /safeNearInput.
+split.
   split.
-  split.
-  rewrite -tensor_nil_leP -[(_ <= _)%R]negbK -ltNge tensor_nilD tensor_nilN.
-  rewrite Hsx ntensor_of_tupleE (tnth_nth 0%R).
-  rewrite (_ : ((_)`_conc = C s)) //.
-  by rewrite (_ : (const_t 1).[::] = 1) // const_tK.
+    rewrite -tensor_nil_leP -[(_ <= _)%R]negbK -ltNge tensor_nilM.
+    rewrite Hsx ntensor_of_tupleE (tnth_nth 0%R).
+    by rewrite [X in (_ * X)%R]const_tK.
   by move/andP: Hc => [].
-  split.
+split.
   by apply/andP.
-  split.
+split.
   by apply/andP.
-  split.
+split.
   by apply/andP.
-  split.
+split.
   by apply/andP.
-  by apply/andP.
+by apply/andP.
 Qed.
 
 Theorem pk_safe (n : nat) (t : R) (s : state) :
@@ -1547,65 +1543,61 @@ Theorem pk_safe (n : nat) (t : R) (s : state) :
 Proof.
 move=> Hi.
 apply/doses_safe => //=.
-by rewrite const_t_ltP const_tK Vd_pos.
-by rewrite const_t_ltP const_tK Ke_pos.
-by rewrite const_t_ltP const_tK Ka_pos.
-by rewrite const_t_ltP const_tK ttd_pos.
-by rewrite const_t_ltP const_tK C_safe_pos.
-apply/eqP => H.
-have := Ke_n_Ka => /eqP.
-apply.
-move/eqP: H.
-rewrite subr_eq0 -tensor_nil_eqP.
-by move=> /eqP.
-rewrite /dCdt_root.
-rewrite -RlnE.
-rewrite /dCdt_root /Ke /Ka !const_tK.
-apply/RltP.
-rewrite -!RmultE -!RoppE -!RinvE -RplusE.
-interval.
-apply/Rlt_mult_inv_pos;
-apply/RltP;
-rewrite const_t_ltP const_tK.
-by apply/Ka_pos.
-by apply/Ke_pos.
-move=> C HC.
-set s' :=
+- by rewrite const_t_ltP const_tK Vd_pos.
+- by rewrite const_t_ltP const_tK Ke_pos.
+- by rewrite const_t_ltP const_tK Ka_pos.
+- by rewrite const_t_ltP const_tK ttd_pos.
+- by rewrite const_t_ltP const_tK C_safe_pos.
+- rewrite subr_eq0.
+  apply/eqP.
+  rewrite tensor_nil_eqP.
+  by apply/eqP/Ke_n_Ka.
+- rewrite /dCdt_root -RlnE.
+    rewrite /Ke /Ka !const_tK.
+    apply/RltP.
+    rewrite -!RmultE -!RoppE -!RinvE -RplusE.
+    interval.
+  apply/Rlt_mult_inv_pos;
+  apply/RltP;
+  rewrite const_t_ltP const_tK.
+    by apply/Ka_pos.
+  by apply/Ke_pos.
+- move=> C HC.
+  set s' :=
   {|
 C := C; T := T s; wbc := wbc s; age := age s; weight := weight s; sex := sex s
   |}.
-suff /safe: safeInput (ntensor_of_tuple (state_to_tuple s')).
-rewrite /safeOutput ntensor_of_tupleK state_to_tupleK.
-by rewrite /s' /Application.C /network /normpk //= => /RleP.
-rewrite /safeInput.
-split.
-rewrite -!tensor_nil_leP !const_tK /ntensor_of_tuple /= nstackE const_tK.
-rewrite /conc /state_to_tuple tnth0 /s' /=.
-apply/andP.
-move: HC.
-by rewrite const_tK.
-move: Hi => [_].
-by rewrite -!tensor_nil_leP /s' !ntensor_of_tupleE !(tnth_nth 0) /=.
-move=> C HC.
-set s' :=
+  suff /safe: safeInput (ntensor_of_tuple (state_to_tuple s')).
+    rewrite /safeOutput ntensor_of_tupleK state_to_tupleK.
+    by rewrite /s' /Application.C /network /normpk //= => /RleP.
+  rewrite /safeInput.
+  split.
+    rewrite -!tensor_nil_leP !const_tK /ntensor_of_tuple /= nstackE const_tK.
+    rewrite /conc /state_to_tuple tnth0 /s' /=.
+    apply/andP.
+    move: HC.
+    by rewrite const_tK.
+  move: Hi => [_].
+  by rewrite -!tensor_nil_leP /s' !ntensor_of_tupleE !(tnth_nth 0) /=.
+- move=> C HC.
+  set s' :=
   {|
 C := C; T := T s; wbc := wbc s; age := age s; weight := weight s; sex := sex s
   |}.
-suff /nonNeg: safeInput (ntensor_of_tuple (state_to_tuple s')).
-rewrite /nonNegOutput => /ltW.
-rewrite /error.
-case:ifP => H //.
-by rewrite -tensor_nil_leP /normpk const_tK.
-rewrite /safeInput.
-split.
-rewrite -!tensor_nil_leP !const_tK /ntensor_of_tuple /= nstackE const_tK.
-rewrite /conc /state_to_tuple tnth0 /s' /=.
-apply/andP.
-move: HC.
-by rewrite const_tK.
-move: Hi => [_].
-by rewrite -!tensor_nil_leP !ntensor_of_tupleE.
-move: Hi => [H _].
-move: H.
-by rewrite -!tensor_nil_leP !const_tK ntensor_of_tupleE => /andP.
+  suff /nonNeg: safeInput (ntensor_of_tuple (state_to_tuple s')).
+    rewrite /nonNegOutput /error => /ltW.
+    case:ifP => H //.
+    by rewrite -tensor_nil_leP /normpk const_tK.
+  rewrite /safeInput.
+  split.
+    rewrite -!tensor_nil_leP !const_tK /ntensor_of_tuple /= nstackE const_tK.
+    rewrite /conc /state_to_tuple tnth0 /s' /=.
+    apply/andP.
+    move: HC.
+    by rewrite const_tK.
+  move: Hi => [_].
+  by rewrite -!tensor_nil_leP !ntensor_of_tupleE.
+- move: Hi => [H _].
+  move: H.
+  by rewrite -!tensor_nil_leP !const_tK ntensor_of_tupleE => /andP.
 Qed.

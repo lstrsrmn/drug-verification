@@ -82,7 +82,7 @@ eps : Real
 
 safeFarInput : InputVector -> Bool
 safeFarInput x = 
-    0 <= x ! conc <= C_safe - 1 and
+    0 <= x ! conc <= C_safe * 0.99 and
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
@@ -101,7 +101,7 @@ safeFar = forall x . safeFarInput x => safeFarOutput x
 
 safeNearInput : InputVector -> Bool
 safeNearInput x = 
-    C_safe - 1 <= x ! conc <= C_safe and
+    C_safe * 0.99 <= x ! conc <= C_safe and
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and

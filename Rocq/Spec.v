@@ -69,13 +69,13 @@ Definition Ke_under : 'nT[R]_(nil) := const_t (4149 / 10000 : R).
 
 Definition eps : 'nT[R]_(nil) := const_t (1 / 1000 : R).
 
-Definition safeFarInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= (C_safe - const_t (1 : R)))) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
+Definition safeFarInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= (C_safe * const_t (99 / 100 : R)))) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
 
 Definition safeFarOutput (x : InputVector) : Prop := let y := ((normpk x)^^0 * Ka) / (Vd * Ka - Ke) in if Ka < Ke then (x^^conc + (y * Ke_under - Ka_over)) < C_safe else (x^^conc + (y * Ke_over - Ka_under)) < C_safe.
 
 Axiom safeFar : forall x, safeFarInput x -> safeFarOutput x.
 
-Definition safeNearInput (x : InputVector) : Prop := (((C_safe - const_t (1 : R)) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
+Definition safeNearInput (x : InputVector) : Prop := (((C_safe * const_t (99 / 100 : R)) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
 
 Definition safeNearOutput (x : InputVector) : Prop := (normpk x)^^0 < eps.
 
