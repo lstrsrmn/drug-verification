@@ -4,12 +4,12 @@
 (*  - Vehicle version: 0.23.0+dev *)
 (*  - Rocq version: 9.0.0 *)
 
-From Stdlib Require Import Reals.
 From mathcomp Require Import all_boot.
 From mathcomp Require Import all_algebra.
 From mathcomp Require Import all_reals.
 From mathcomp Require Import Rstruct.
 Require Import vehicle.tensor.
+Require Import Stdlib.Reals.Reals.
 Open Scope ring_scope.
 Open Scope order_scope.
 
@@ -67,16 +67,22 @@ Definition Ke_over : 'nT[R]_(nil) := const_t (83 / 200 : R).
 
 Definition Ke_under : 'nT[R]_(nil) := const_t (4149 / 10000 : R).
 
-Definition root_over : 'nT[R]_(nil) := const_t (1257 / 5000 : R).
+Definition eps : 'nT[R]_(nil) := const_t (1 / 1000 : R).
 
-Axiom root_over_ttd : root_over < ttd.
+Definition safeFarInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= (C_safe - const_t (1 : R)))) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
+
+Definition safeFarOutput (x : InputVector) : Prop := let y := ((normpk x)^^0 * Ka) / (Vd * Ka - Ke) in if Ka < Ke then (x^^conc + (y * Ke_under - Ka_over)) < C_safe else (x^^conc + (y * Ke_over - Ka_under)) < C_safe.
+
+Axiom safeFar : forall x, safeFarInput x -> safeFarOutput x.
+
+Definition safeNearInput (x : InputVector) : Prop := (((C_safe - const_t (1 : R)) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
+
+Definition safeNearOutput (x : InputVector) : Prop := (normpk x)^^0 < eps.
+
+Axiom safeNear : forall x, safeNearInput x -> safeNearOutput x.
 
 Definition safeInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
 
-Definition safeOutput (x : InputVector) : Prop := let y := ((normpk x)^^0 * Ka) / (Vd * Ka - Ke) in if Ka < Ke then (x^^conc + (y * Ke_under - Ka_over)) <= C_safe else (x^^conc + (y * Ke_over - Ka_under)) <= C_safe.
-
-Axiom safe : forall x, safeInput x -> safeOutput x.
-
-Definition nonNegOutput (x : InputVector) : Prop := const_t (0 : R) <= (normpk x)^^0.
+Definition nonNegOutput (x : InputVector) : Prop := const_t (0 : R) < (normpk x)^^0.
 
 Axiom nonNeg : forall x, safeInput x -> nonNegOutput x.

@@ -8,7 +8,6 @@ age = 3
 weight = 4
 sex = 5
 
-
 type OutputVector= Tensor Real [1]
 
 meanScalingValues : UnnormalisedInputVector
@@ -79,35 +78,54 @@ Ke_over : Real
 Ke_under : Real
 
 @parameter
-root_over : Real
+eps : Real
 
-@property
-root_over_ttd : Bool
-root_over_ttd = root_over < ttd
-
-safeInput : InputVector -> Bool
-safeInput x = 
-    0 <= x ! conc <= C_safe and
-    36.5 <= x ! temp <= 40 and -- temps from dummy data based on a person being sick
+safeFarInput : InputVector -> Bool
+safeFarInput x = 
+    0 <= x ! conc <= C_safe - 1 and
+    36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
     50 <= x ! weight <= 100 and
     0 <= x ! sex <= 1
 
-safeOutput : InputVector -> Bool
-safeOutput x = let y =  ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
+safeFarOutput : InputVector -> Bool
+safeFarOutput x = let y =  ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
            if Ka < Ke
-           then (x ! conc) + y * (Ke_under - Ka_over) <= C_safe
-           else (x ! conc) + y * (Ke_over - Ka_under) <= C_safe
-
--- C + y * ((Ka/Ke)^(-Ke/(Ka-Ke)) - (Ka/Ke)^(-Ka/(Ka-Ke))) <= C_safe
+           then (x ! conc) + y * (Ke_under - Ka_over) < C_safe
+           else (x ! conc) + y * (Ke_over - Ka_under) < C_safe
 
 @property
-safe : Bool
-safe = forall x . safeInput x => safeOutput x
+safeFar : Bool
+safeFar = forall x . safeFarInput x => safeFarOutput x
+
+safeNearInput : InputVector -> Bool
+safeNearInput x = 
+    C_safe - 1 <= x ! conc <= C_safe and
+    36.5 <= x ! temp <= 40 and
+    7.5 <= x ! wbc <= 20 and
+    18 <= x ! age <= 89 and
+    50 <= x ! weight <= 100 and
+    0 <= x ! sex <= 1
+
+safeNearOutput : InputVector -> Bool
+safeNearOutput x = ((normpk x) ! 0) < eps
+
+@property
+safeNear : Bool
+safeNear = forall x . safeNearInput x => safeNearOutput x
+
+safeInput : InputVector -> Bool
+safeInput x = 
+    0 <= x ! conc <= C_safe and
+    36.5 <= x ! temp <= 40 and
+    7.5 <= x ! wbc <= 20 and
+    18 <= x ! age <= 89 and
+    50 <= x ! weight <= 100 and
+    0 <= x ! sex <= 1
 
 nonNegOutput : InputVector -> Bool
-nonNegOutput x = 0 <= (normpk x) ! 0
+nonNegOutput x =  0 < (normpk x) ! 0
 
 @property
 nonNeg : Bool
