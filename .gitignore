@@ -7,3 +7,4 @@ Rocq/*
 !Rocq/_CoqProject
 *.tex
 .*
+!*.sh

@@ -15,21 +15,19 @@ Open Scope order_scope.
 
 Notation R := Rdefinitions.R.
 
-Definition UnnormalisedInputVector : Type := 'nT[R]_(6%N :: nil).
+Definition UnnormalisedInputVector : Type := 'nT[R]_(5%N :: nil).
 
-Definition InputVector : Type := 'nT[R]_(6%N :: nil).
+Definition InputVector : Type := 'nT[R]_(5%N :: nil).
 
-Definition conc : 'I_6%N := 0.
+Definition conc : 'I_5%N := 0.
 
-Definition temp : 'I_6%N := 1.
+Definition temp : 'I_5%N := 1.
 
-Definition wbc : 'I_6%N := 2.
+Definition wbc : 'I_5%N := 2.
 
-Definition age : 'I_6%N := 3.
+Definition age : 'I_5%N := 3.
 
-Definition weight : 'I_6%N := 4.
-
-Definition sex : 'I_6%N := 5.
+Definition weight : 'I_5%N := 4.
 
 Definition OutputVector : Type := 'nT[R]_(1%N :: nil).
 
@@ -69,19 +67,19 @@ Definition Ke_under : 'nT[R]_(nil) := const_t (4149 / 10000 : R).
 
 Definition eps : 'nT[R]_(nil) := const_t (1 / 1000 : R).
 
-Definition safeFarInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= (C_safe * const_t (99 / 100 : R)))) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
+Definition safeFarInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= (C_safe * const_t (99 / 100 : R)))) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ ((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R)))))).
 
 Definition safeFarOutput (x : InputVector) : Prop := let y := ((normpk x)^^0 * Ka) / (Vd * Ka - Ke) in if Ka < Ke then (x^^conc + (y * Ke_under - Ka_over)) < C_safe else (x^^conc + (y * Ke_over - Ka_under)) < C_safe.
 
 Axiom safeFar : forall x, safeFarInput x -> safeFarOutput x.
 
-Definition safeNearInput (x : InputVector) : Prop := (((C_safe * const_t (99 / 100 : R)) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
+Definition safeNearInput (x : InputVector) : Prop := (((C_safe * const_t (99 / 100 : R)) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ ((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R)))))).
 
 Definition safeNearOutput (x : InputVector) : Prop := (normpk x)^^0 < eps.
 
 Axiom safeNear : forall x, safeNearInput x -> safeNearOutput x.
 
-Definition safeInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ (((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R))) /\ ((const_t (0 : R) <= x^^sex) /\ (x^^sex <= const_t (1 : R))))))).
+Definition safeInput (x : InputVector) : Prop := ((const_t (0 : R) <= x^^conc) /\ (x^^conc <= C_safe)) /\ (((const_t (73 / 2 : R) <= x^^temp) /\ (x^^temp <= const_t (40 : R))) /\ (((const_t (15 / 2 : R) <= x^^wbc) /\ (x^^wbc <= const_t (20 : R))) /\ (((const_t (18 : R) <= x^^age) /\ (x^^age <= const_t (89 : R))) /\ ((const_t (50 : R) <= x^^weight) /\ (x^^weight <= const_t (100 : R)))))).
 
 Definition nonNegOutput (x : InputVector) : Prop := const_t (0 : R) < (normpk x)^^0.
 

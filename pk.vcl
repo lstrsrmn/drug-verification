@@ -1,20 +1,19 @@
-type UnnormalisedInputVector = Tensor Real [6]
-type InputVector = Tensor Real [6]
+type UnnormalisedInputVector = Tensor Real [5]
+type InputVector = Tensor Real [5]
 
 conc = 0
 temp = 1
 wbc = 2
 age = 3
 weight = 4
-sex = 5
 
 type OutputVector= Tensor Real [1]
 
 meanScalingValues : UnnormalisedInputVector
-meanScalingValues = [13.41985028, 37.73609288, 11.88956131, 50.64, 76.37743713,  0.6]
+meanScalingValues = [13.41985028, 37.73609288, 11.88956131, 50.64, 76.37743713]
 
 standardDeviationValues : UnnormalisedInputVector
-standardDeviationValues =  [7.32717627, 0.625989, 2.54834216, 23.22477987, 14.33796805, 0.48989795]
+standardDeviationValues =  [7.32717627, 0.625989, 2.54834216, 23.22477987, 14.33796805]
 
 normalise : UnnormalisedInputVector -> InputVector
 normalise x = foreach i .
@@ -67,12 +66,14 @@ ttd_pos = 0 < ttd
 
 @parameter
 Ka_over : Real
+-- e^-ka * (ln(ka/ke)/(ka-ke))
 
 @parameter
 Ka_under : Real
 
 @parameter
 Ke_over : Real
+-- e^-ke * (ln(ka/ke)/(ka-ke))
 
 @parameter
 Ke_under : Real
@@ -86,14 +87,14 @@ safeFarInput x =
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100 and
-    0 <= x ! sex <= 1
+    50 <= x ! weight <= 100
 
 safeFarOutput : InputVector -> Bool
-safeFarOutput x = let y =  ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
+safeFarOutput x = let y = ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
            if Ka < Ke
            then (x ! conc) + y * (Ke_under - Ka_over) < C_safe
            else (x ! conc) + y * (Ke_over - Ka_under) < C_safe
+           -- C + C(D, max_root) < C_safe
 
 @property
 safeFar : Bool
@@ -105,8 +106,7 @@ safeNearInput x =
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100 and
-    0 <= x ! sex <= 1
+    50 <= x ! weight <= 100
 
 safeNearOutput : InputVector -> Bool
 safeNearOutput x = ((normpk x) ! 0) < eps
@@ -121,8 +121,7 @@ safeInput x =
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100 and
-    0 <= x ! sex <= 1
+    50 <= x ! weight <= 100
 
 nonNegOutput : InputVector -> Bool
 nonNegOutput x =  0 < (normpk x) ! 0
