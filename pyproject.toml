@@ -1,0 +1,36 @@
+[project]
+name = "drug-verification"
+version = "0.1.0"
+description = "Training and verifying a controler for dispensing antibiotics"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "mpmath>=1.3.0",
+    "onnxruntime>=1.24.3",
+    "onnxscript>=0.1.0",
+    "pandas>=3.0.1",
+    "scikit-learn>=1.8.0",
+    "tensorflow>=2.21.0",
+    "torch>=2.10.0",
+    "vehicle-lang",
+]
+
+[project.scripts]
+pk = "drug_verification.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["drug_verification"]
+
+[tool.uv.workspace]
+members = [
+    "vehicle/vehicle-python",
+]
+
+[tool.uv.sources]
+vehicle-lang = { workspace = true }

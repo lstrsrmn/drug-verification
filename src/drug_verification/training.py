@@ -1,0 +1,161 @@
+"""Neural network training, evaluation, and export."""
+
+import tensorflow as tf
+from tensorflow.keras import models, layers
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+from . import constants as C
+
+
+def build_model(input_size, hidden_sizes=C.DEFAULT_HIDDEN_SIZES):
+    """Build a feedforward Keras model for dose prediction."""
+    layer_list = [layers.Input(shape=(input_size,))]
+    for size in hidden_sizes:
+        layer_list.append(layers.Dense(size, activation="relu"))
+    layer_list.append(layers.Dense(1, activation="relu"))
+
+    model = models.Sequential(layer_list)
+    model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+    return model
+
+
+def prepare_data(X, y, test_size=C.DEFAULT_TEST_SIZE, seed=C.DEFAULT_SEED):
+    """Scale features and split into train/test sets.
+
+    The scaler is fit on the training split only to avoid data leakage.
+
+    Returns (X_train, X_test, y_train, y_test, scaler).
+    """
+    y = y.reshape(-1, 1) if y.ndim == 1 else y
+
+    X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=seed
+    )
+
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train_raw)
+    X_test = scaler.transform(X_test_raw)
+
+    return X_train, X_test, y_train, y_test, scaler
+
+
+def train_model(
+    model,
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    epochs=C.DEFAULT_EPOCHS,
+    batch_size=C.DEFAULT_BATCH_SIZE,
+):
+    """Train the model and return the history object."""
+    history = model.fit(
+        X_train,
+        y_train,
+        validation_data=(X_val, y_val),
+        epochs=epochs,
+        batch_size=batch_size,
+    )
+    return history
+
+
+def evaluate_model(model, X_test, y_test):
+    """Evaluate model on the test set.
+
+    Returns a dict with mse, mae, and max_absolute_error.
+    """
+    preds = model.predict(X_test, verbose=0)
+    errors = preds - y_test
+    mse = float(tf.reduce_mean(tf.square(errors)).numpy())
+    mae = float(tf.reduce_mean(tf.abs(errors)).numpy())
+    max_ae = float(tf.reduce_max(tf.abs(errors)).numpy())
+    return {"mse": mse, "mae": mae, "max_absolute_error": max_ae}
+
+
+def export_onnx(model, out_path="pk.onnx"):
+    """Export a Keras model to ONNX format."""
+    import tf2onnx
+
+    onnx_model, _ = tf2onnx.convert.from_keras(model, output_path=out_path)
+    print(f"Saved ONNX model to: {out_path}")
+    return onnx_model
+
+
+def train_model_with_constraint(
+    model,
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    constraint_fn,
+    parameters: dict[str, float],
+    alpha=0.5,
+    epochs=C.DEFAULT_EPOCHS,
+    batch_size=C.DEFAULT_BATCH_SIZE,
+):
+    """Train with combined task loss + a single Vehicle constraint loss.
+
+    Uses a custom tf.GradientTape loop so that the Vehicle specification
+    loss can be backpropagated alongside the standard MSE loss.
+
+    Args:
+        model: Keras model.
+        X_train, y_train: Training data.
+        X_val, y_val: Validation data.
+        constraint_fn: Callable loss function for a single Vehicle property.
+        parameters: Dictionary of parameters for the constraint function.
+        alpha: Weight for task loss; (1-alpha) for constraint loss.
+        epochs: Number of training epochs.
+        batch_size: Batch size.
+
+    Returns:
+        dict with training history (task_loss, constraint_loss, total_loss per epoch).
+    """
+    optimizer = tf.keras.optimizers.Adam()
+    dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
+    dataset = dataset.shuffle(len(X_train)).batch(batch_size)
+
+    def network_fn(x):
+        return tf.reshape(model(tf.reshape(x, [1, -1]), training=True), [-1])
+
+    history = {"task_loss": [], "constraint_loss": [], "total_loss": [], "val_loss": []}
+
+    for epoch in range(epochs):
+        epoch_task, epoch_constraint, epoch_total, n_batches = 0.0, 0.0, 0.0, 0
+
+        for x_batch, y_batch in dataset:
+            with tf.GradientTape() as tape:
+                preds = model(x_batch, training=True)
+                task_loss = tf.reduce_mean(tf.square(preds - y_batch))
+
+                constraint_loss = constraint_fn(network_fn, parameters["C_safe"], parameters["eps"])
+
+                total_loss = alpha * task_loss + (1 - alpha) * constraint_loss
+
+            grads = tape.gradient(total_loss, model.trainable_variables)
+            optimizer.apply_gradients(zip(grads, model.trainable_variables))
+
+            epoch_task += task_loss.numpy()
+            epoch_constraint += constraint_loss.numpy()
+            epoch_total += total_loss.numpy()
+            n_batches += 1
+
+        # Validation loss
+        val_preds = model(X_val, training=False)
+        val_loss = tf.reduce_mean(tf.square(val_preds - y_val)).numpy()
+
+        history["task_loss"].append(epoch_task / n_batches)
+        history["constraint_loss"].append(epoch_constraint / n_batches)
+        history["total_loss"].append(epoch_total / n_batches)
+        history["val_loss"].append(val_loss)
+
+        print(
+            f"Epoch {epoch + 1}/{epochs} — "
+            f"task: {epoch_task / n_batches:.4f}, "
+            f"constraint: {epoch_constraint / n_batches:.4f}, "
+            f"total: {epoch_total / n_batches:.4f}, "
+            f"val: {val_loss:.4f}"
+        )
+
+    return history
