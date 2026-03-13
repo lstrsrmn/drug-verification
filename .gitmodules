@@ -1,0 +1,3 @@
+[submodule "vehicle"]
+	path = vehicle
+	url = git@github.com:vehicle-lang/vehicle.git
