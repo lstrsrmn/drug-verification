@@ -10,10 +10,10 @@ weight = 4
 type OutputVector= Tensor Real [1]
 
 meanScalingValues : UnnormalisedInputVector
-meanScalingValues = [13.41985028, 37.73609288, 11.88956131, 50.64, 76.37743713]
+meanScalingValues = [13.43430467, 37.73065665, 11.87602918, 50.80319149, 76.4415882]
 
 standardDeviationValues : UnnormalisedInputVector
-standardDeviationValues =  [7.32717627, 0.625989, 2.54834216, 23.22477987, 14.33796805]
+standardDeviationValues =  [7.31223371, 0.62039077, 2.54280181, 23.16670829, 14.39579016]
 
 normalise : UnnormalisedInputVector -> InputVector
 normalise x = foreach i .
@@ -23,7 +23,7 @@ normalise x = foreach i .
 pk : InputVector -> OutputVector
 
 normpk : UnnormalisedInputVector -> OutputVector
-normpk x = pk (x)
+normpk x = pk (normalise x)
 
 @parameter
 Ka : Real
