@@ -1,19 +1,25 @@
-type UnnormalisedInputVector = Tensor Real [5]
-type InputVector = Tensor Real [5]
+type UnnormalisedInputVector = Tensor Real [6]
+type InputVector = Tensor Real [6]
 
 conc = 0
 temp = 1
 wbc = 2
 age = 3
 weight = 4
+dprev = 5
 
 type OutputVector= Tensor Real [1]
 
+-- WARNING: these values are auto-updated by `update_vcl_scaler` in training.py
+-- whenever the model is retrained via `pk train`. Do NOT edit them by hand.
+-- They must match the StandardScaler fitted during training exactly; any
+-- divergence means verification applies to different normalisation than the
+-- exported ONNX model uses, silently invalidating the formal proof.
 meanScalingValues : UnnormalisedInputVector
-meanScalingValues = [13.43430467, 37.73065665, 11.87602918, 50.80319149, 76.4415882]
+meanScalingValues = [13.434305, 37.730657, 11.876029, 50.803191, 76.441588, 47.557677]
 
 standardDeviationValues : UnnormalisedInputVector
-standardDeviationValues =  [7.31223371, 0.62039077, 2.54280181, 23.16670829, 14.39579016]
+standardDeviationValues =  [7.3122337, 0.62039077, 2.5428018, 23.166708, 14.39579, 99.915869]
 
 normalise : UnnormalisedInputVector -> InputVector
 normalise x = foreach i .
@@ -82,12 +88,13 @@ Ke_under : Real
 eps : Real
 
 safeFarInput : InputVector -> Bool
-safeFarInput x = 
+safeFarInput x =
     0 <= x ! conc <= C_safe * 0.99 and
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100
+    50 <= x ! weight <= 100 and
+    0 <= x ! dprev <= 1500
 
 safeFarOutput : InputVector -> Bool
 safeFarOutput x = let y = ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
@@ -101,12 +108,13 @@ safeFar : Bool
 safeFar = forall x . safeFarInput x => safeFarOutput x
 
 safeNearInput : InputVector -> Bool
-safeNearInput x = 
+safeNearInput x =
     C_safe * 0.99 <= x ! conc <= C_safe and
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100
+    50 <= x ! weight <= 100 and
+    0 <= x ! dprev <= 1500
 
 safeNearOutput : InputVector -> Bool
 safeNearOutput x = ((normpk x) ! 0) < eps
@@ -116,12 +124,13 @@ safeNear : Bool
 safeNear = forall x . safeNearInput x => safeNearOutput x
 
 safeInput : InputVector -> Bool
-safeInput x = 
+safeInput x =
     0 <= x ! conc <= C_safe and
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100
+    50 <= x ! weight <= 100 and
+    0 <= x ! dprev <= 1500
 
 nonNegOutput : InputVector -> Bool
 nonNegOutput x =  0 < (normpk x) ! 0

@@ -73,6 +73,52 @@ def evaluate_model(model, X_test, y_test):
     return {"mse": mse, "mae": mae, "max_absolute_error": max_ae}
 
 
+def update_vcl_scaler(scaler, spec_path="pk.vcl"):
+    """Rewrite the normalisation constants in a Vehicle spec file to match a fitted scaler.
+
+    The Vehicle spec embeds mean and std values used to normalise inputs before
+    passing them to the network (see `normalise` in pk.vcl). These must exactly
+    match the StandardScaler fitted during training — if they diverge, the
+    verified property applies to a *different* normalisation than the exported
+    ONNX model uses, silently invalidating the formal proof.
+
+    This function rewrites only the two value lines in-place, leaving all other
+    spec content unchanged. It should be called immediately after prepare_data()
+    and before any export or verification step.
+
+    Args:
+        scaler: A fitted sklearn StandardScaler.
+        spec_path: Path to the .vcl file to update.
+    """
+    import re
+
+    mean_str = ", ".join(f"{v:.8g}" for v in scaler.mean_)
+    std_str = ", ".join(f"{v:.8g}" for v in scaler.scale_)
+
+    with open(spec_path, "r") as f:
+        content = f.read()
+
+    # Replace the value lines; patterns are anchored to the assignment so that
+    # the type declaration lines above them are left untouched.
+    content = re.sub(
+        r"(meanScalingValues\s*=\s*)\[.*?\]",
+        rf"\g<1>[{mean_str}]",
+        content,
+    )
+    content = re.sub(
+        r"(standardDeviationValues\s*=\s*)\[.*?\]",
+        rf"\g<1>[{std_str}]",
+        content,
+    )
+
+    with open(spec_path, "w") as f:
+        f.write(content)
+
+    print(f"Updated {spec_path} with scaler values from this training run.")
+    print(f"  meanScalingValues        = [{mean_str}]")
+    print(f"  standardDeviationValues  = [{std_str}]")
+
+
 def export_onnx(model, out_path="pk.onnx"):
     """Export a Keras model to ONNX format."""
     import tf2onnx

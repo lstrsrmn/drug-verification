@@ -8,7 +8,7 @@ import pandas as pd
 
 def save_data(X, y, x_path="patient_states.csv", y_path="dose_targets.csv"):
     """Save simulation state/action arrays to CSV files."""
-    df_X = pd.DataFrame(X, columns=["C", "T", "WBC", "Age", "Weight"])
+    df_X = pd.DataFrame(X, columns=["C", "T", "WBC", "Age", "Weight", "D_prev"])
     df_y = pd.DataFrame(y, columns=["Dose"])
     df_X.to_csv(x_path, index=False)
     df_y.to_csv(y_path, index=False)

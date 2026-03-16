@@ -30,7 +30,7 @@ def cmd_train(args):
 
     from drug_verification.simulation import simulate_cohort
     from drug_verification.types import SimulationConfig
-    from drug_verification.training import build_model, prepare_data, train_model, train_model_with_constraint, evaluate_model
+    from drug_verification.training import build_model, prepare_data, train_model, train_model_with_constraint, evaluate_model, update_vcl_scaler
     from drug_verification.io import save_data
 
     tf.random.set_seed(args.seed)
@@ -47,6 +47,11 @@ def cmd_train(args):
     X_train, X_test, y_train, y_test, scaler = prepare_data(X, y, seed=args.seed)
     print(f"Scaler mean: {scaler.mean_}")
     print(f"Scaler std:  {scaler.scale_}")
+
+    # Keep the Vehicle spec in sync with the fitted scaler.
+    # The spec hardcodes normalisation constants used during verification — if
+    # these differ from what the trained model sees, the proof is unsound.
+    update_vcl_scaler(scaler, spec_path=args.spec_path)
 
     model = build_model(X_train.shape[1])
     model.summary()
@@ -213,7 +218,7 @@ def build_parser():
 
     # test
     p_test = sub.add_parser("test", help="Build zero-weight ONNX model for formal verification")
-    p_test.add_argument("--input-size", type=int, default=5, help="Input dimension for the model (default: 5)")
+    p_test.add_argument("--input-size", type=int, default=6, help="Input dimension for the model (default: 5)")
     p_test.add_argument("--output-path", default="pk.onnx", help="Path where ONNX model will be saved (default: pk.onnx)")
     p_test.add_argument("--validate", action="store_true", help="Validate generated model with onnxruntime")
 
