@@ -521,8 +521,8 @@ apply/(ler0_derive1_nincry) => //.
 - by apply/ltW.
 Qed.
 
-Definition total_conc {n} (Ds : n.-tuple R) (t : R)
-  := \sum_(i < n) ((cst 0) \max (Concentration (tnth Ds i)) \o (center (ttd * i%:R))) t.
+Definition total_conc {n} (Ds : n.-tuple R)
+  := \sum_(i < n) ((cst 0) \max (Concentration (tnth Ds i)) \o (center (ttd * i%:R))).
 
 Definition total_conc_diff n (Ds : n.-tuple R) (t : R)
   := \sum_(i < n) (fun x : R => if 0 < Concentration (tnth Ds i) x then (dCdt (tnth Ds i) x) else 0) (t - ttd * i%:R).
@@ -554,7 +554,7 @@ Qed.
 Lemma total_conc_cont {n} (Ds : n.-tuple R) :
   continuous (total_conc Ds).
 Proof.
-rewrite /total_conc.
+rewrite /total_conc -sum_apply.
 apply/continuous_big.
   apply/tvs.standard_add_continuous.
 move=> i _.
@@ -584,7 +584,7 @@ Qed.
 Lemma total_conc_diff_correct n (t : R) (Ds : n.-tuple R) (HDs : all (>= 0) Ds) (Ht : forall m : nat, (m < n)%O -> t <> ttd * m%:R) :
   (total_conc Ds)^`() t = total_conc_diff Ds t.
 Proof.
-rewrite derive1E /total_conc sum_apply derive_sum; last first.
+rewrite derive1E /total_conc derive_sum; last first.
   move=> i.
   case: (eqVneq (tnth Ds i) 0) => [-> | HD]; first by rewrite conc_D0 max_eq.
   apply/total_conc_derivable.
@@ -598,14 +598,8 @@ case: (eqVneq (tnth Ds i) 0) => [-> | HD].
 by rewrite max_eq conc_D0 ?derive_cst ?ltxx.
 case (ltgtP 0 (Concentration (tnth Ds i) (t - ttd * i %:R))) => H.
 - rewrite H -derive1E derive1_comp //; last first.
-    by apply/total_conc_derivable/nesym/eqP/lt0r_neq0.
-  rewrite derive1_id mulr1 // derive1_comp //; last first.
-    apply/derivable_max/conc_cont/cst_continuous/derivable1_diffP/conc_diff.
-      apply/nesym/conc_neq0; first by apply/eqP.
-      apply/eqP.
-      rewrite subr_eq0.
-      by apply/eqP/Ht/ltn_ord.
-    by apply/derivable_cst.
+  apply/derivable_max/conc_cont/cst_continuous/derivable1_diffP/conc_diff/derivable_cst.
+  by apply/nesym/eqP/lt0r_neq0.
   rewrite !derive1E /= deriveD // derive_id derive_cst addr0 mulr1 -derive1E.
   rewrite derive1E derive_maxr //=.
   + by rewrite -derive1E derivative_correct.
@@ -641,20 +635,21 @@ Lemma unfold_n_dose_once {n} (initial t : R) :
   total_conc (n_doses initial n.+1) t = total_conc (n_doses initial n) t + maxr 0 (Concentration (network (total_conc (n_doses initial n) ((ttd * n.+1%:R)%R))) (t - ttd * n.+1%:R%R)).
 Proof.
 rewrite /total_conc big_ord_recr /total_conc /=.
-rewrite (tnth_nth (network initial)) /= nth_rcons ifF ?ifT ?size_tuple ?ltnn //.
-apply f_equal2.
+rewrite (tnth_nth (network initial)) /= nth_rcons ifF ?ifT ?size_tuple ?ltnn // -!sum_apply.
+congr (_ + _).
   apply/eq_bigr=> i _.
   apply/f_equal2/f_equal2 => //.
   by rewrite !(tnth_nth 0) nth_rcons /= size_tuple ifT.
+rewrite /=.
 apply/f_equal2/f_equal2 => //.
-apply/f_equal/eq_bigr => i _ /=.
-by rewrite -(mulr_natr ttd).
+apply/f_equal.
+by rewrite /total_conc -sum_apply /= -(mulr_natr ttd).
 Qed.
 
 Lemma total_conc_non_neg {n : nat} (initial t : R) (Hi : 0 <= initial) (Ht : 0 <= t) :
   all [pred x | 0 <= x] (n_doses initial n) -> 0 <= (total_conc (n_doses initial n) t).
 Proof.
-rewrite /total_conc => H.
+rewrite /total_conc -!sum_apply => H.
 apply/sumr_ge0 => i _.
 rewrite /= /maxr.
 case: ifP => //.
@@ -695,12 +690,12 @@ apply/non_neg.
 fold n_doses.
 move: H => /=.
 congr (0 <= _ <= C_safe).
-  rewrite /total_conc big_ord_recr /= max_l ?addr0.
+  rewrite /total_conc -!sum_apply big_ord_recr /= max_l ?addr0.
     apply/eq_bigr => i _.
     apply/f_equal2/f_equal2 => //.
     by rewrite !(tnth_nth 0) nth_rcons size_tuple /= ltn_ord.
   by rewrite -[ttd *+ m.+1]mulr_natr -mulrBr subrr mulr0 conc_t0 /maxr.
-rewrite /total_conc big_ord_recr /= max_l ?addr0.
+rewrite /total_conc -!sum_apply big_ord_recr /= max_l ?addr0.
   apply/eq_bigr => i _.
   apply/f_equal2/f_equal2 => //.
   by rewrite !(tnth_nth 0) nth_rcons size_tuple /= ltn_ord.
@@ -751,6 +746,7 @@ case => [_| n IHn] t;
 rewrite /total_conc.
   apply/andP.
   split.
+  rewrite -!sum_apply.
     apply/sumr_ge0 => /= i _.
     rewrite /maxr.
     case: ifP => //.
@@ -763,10 +759,12 @@ rewrite /total_conc.
     by apply/root_is_max/non_neg/HC.
   by apply/le_trans/(snd (andP HC))/(fst (andP (HC))).
 case: (lerP t (ttd *+ n.+1)) => t_ttd.
-  rewrite big_ord_recr /= max_l.
+  rewrite -!sum_apply big_ord_recr /= max_l.
     rewrite addr0.
-    rewrite (eq_bigr (fun i => maxr 0%R (Concentration (tnth (n_doses initial n) i) (t - ttd * i%:R)))).
-      by apply (IHn n (ltnSn n) t).
+    rewrite (eq_bigr (fun i => ((cst 0 \max Concentration (tnth (n_doses initial n) i)) \o center (ttd * i%:R)) t)).
+      move: (IHn n (ltnSn n) t).
+      rewrite /total_conc -sum_apply.
+      by apply.
     move=> i _.
     by rewrite !(tnth_nth 0) nth_rcons size_tuple /= ltn_ord.
   apply/conc_non_pos.
@@ -775,13 +773,14 @@ case: (lerP t (ttd *+ n.+1)) => t_ttd.
   by rewrite subr_le0 mulr_natr.
 apply/andP.
 split.
+  rewrite -sum_apply.
   apply/sumr_ge0 => /= i _.
   rewrite /maxr.
   by case: ifP => //; apply/ltW.
 rewrite big_ord_recr /=.
 apply/le_trans/(@safe (total_conc (n_doses initial n) (ttd *+ n.+1)))/IHn/ltnSn.
 apply/lerD.
-  rewrite /total_conc.
+  rewrite /total_conc -!sum_apply.
   apply/ler_sum => /= i _.
   rewrite !(tnth_nth 0) nth_rcons size_tuple /= ltn_ord.
   rewrite /maxr.
@@ -820,6 +819,7 @@ apply/lerD.
     by rewrite size_tuple.
   by rewrite subr_gt0 mulr_natr ltr_pMn2l.
 rewrite (tnth_nth 0) nth_rcons size_tuple ltnn eq_refl /maxr.
+rewrite /= /maxr.
 case:ifP => _.
   by apply/root_is_max/non_neg/IHn/ltnSn.
 by apply/conc_non_neg/root_non_neg/non_neg/IHn/ltnSn.
@@ -1171,7 +1171,6 @@ apply/doses_safe => //=.
 - by rewrite const_t_ltP const_tK Ke_pos.
 - by rewrite const_t_ltP const_tK Ka_pos.
 - by rewrite const_t_ltP const_tK ttd_pos.
-- by rewrite const_t_ltP const_tK C_safe_pos.
 - rewrite subr_eq0.
   by apply/eqP/tensor_nil_eqP/eqP/Ke_n_Ka.
 - rewrite /dCdt_root -RlnE.
