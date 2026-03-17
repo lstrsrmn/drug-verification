@@ -5,6 +5,7 @@ import argparse
 from drug_verification import constants as C
 from drug_verification import test_utils
 from drug_verification.vehicle_loss import load_drug_verification_constraints
+import idx2numpy
 
 
 
@@ -45,6 +46,9 @@ def cmd_train(args):
     save_data(X, y)
 
     X_train, X_test, y_train, y_test, scaler = prepare_data(X, y, seed=args.seed)
+
+    idx2numpy.convert_to_file("pk_mean.idx", scaler.mean_)
+    idx2numpy.convert_to_file("pk_std.idx", scaler.scale_)
     print(f"Scaler mean: {scaler.mean_}")
     print(f"Scaler std:  {scaler.scale_}")
 

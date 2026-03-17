@@ -75,6 +75,11 @@ def evaluate_model(model, X_test, y_test):
 
 def export_onnx(model, out_path="pk.onnx"):
     """Export a Keras model to ONNX format."""
+    import numpy as np
+    dummy_input = np.zeros((1, 5), dtype="float32")
+    _ = model(dummy_input)
+    model.export(out_path, format="onnx")
+    return
     import tf2onnx
 
     onnx_model, _ = tf2onnx.convert.from_keras(model, output_path=out_path)

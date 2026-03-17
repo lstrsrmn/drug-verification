@@ -9,11 +9,13 @@ weight = 4
 
 type OutputVector= Tensor Real [1]
 
+@dataset
 meanScalingValues : UnnormalisedInputVector
-meanScalingValues = [13.43430467, 37.73065665, 11.87602918, 50.80319149, 76.4415882]
+-- meanScalingValues = [13.434305, 37.730657, 11.876029, 50.803191, 76.441588, 47.557677]
 
+@dataset
 standardDeviationValues : UnnormalisedInputVector
-standardDeviationValues =  [7.31223371, 0.62039077, 2.54280181, 23.16670829, 14.39579016]
+-- standardDeviationValues = [7.3122337, 0.62039077, 2.5428018, 23.166708, 14.39579, 99.915869]
 
 normalise : UnnormalisedInputVector -> InputVector
 normalise x = foreach i .
@@ -101,7 +103,7 @@ safeFar : Bool
 safeFar = forall x . safeFarInput x => safeFarOutput x
 
 safeNearInput : InputVector -> Bool
-safeNearInput x = 
+safeNearInput x =
     C_safe * 0.99 <= x ! conc <= C_safe and
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
