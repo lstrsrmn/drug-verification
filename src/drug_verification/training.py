@@ -123,19 +123,61 @@ def update_vcl_scaler(scaler, spec_path="pk.vcl"):
     idx2numpy.convert_to_file("pk_std.idx", scaler.scale_)
 
 
-def export_onnx(model, out_path="pk.onnx"):
-    """Export a Keras model to ONNX format."""
-    import numpy as np
-    dummy_input = np.zeros((1, 6), dtype="float32")
-    
-    # 2. Call the model once. This 'builds' the internal graph.
-    _ = model(dummy_input)
-    model.export(out_path, format="onnx")
-    return
-    import tf2onnx
+def export_onnx(model, out_path="pk.onnx", positive_clamp=True):
+    """Export a Keras model to ONNX format.
 
-    onnx_model, _ = tf2onnx.convert.from_keras(model, output_path=out_path)
-    print(f"Saved ONNX model to: {out_path}")
+    If positive_clamp is True (default), appends a constant Add node to the
+    ONNX graph that shifts the output by +0.0001, guaranteeing output > 0
+    for the nonNeg verification property.
+    """
+    import tf2onnx
+    import onnx
+    from onnx import numpy_helper, TensorProto
+    import numpy as np
+
+    input_sig = [tf.TensorSpec(model.input_shape, tf.float32, name="input")]
+    onnx_model, _ = tf2onnx.convert.from_function(
+        tf.function(model, input_signature=input_sig),
+        input_signature=input_sig,
+    )
+
+    if positive_clamp:
+        graph = onnx_model.graph
+
+        # The current graph output tensor name
+        original_output = graph.output[0].name
+
+        # Add a scalar constant initializer for the epsilon value
+        epsilon_name = "positive_clamp_epsilon"
+        epsilon_tensor = numpy_helper.from_array(
+            np.array([0.0001], dtype=np.float32), name=epsilon_name
+        )
+        graph.initializer.append(epsilon_tensor)
+
+        # Rename the original output so it's no longer the graph output
+        shifted_output = original_output + "_shifted"
+
+        # Add an Add node: shifted = original + 0.0001
+        add_node = onnx.helper.make_node(
+            "Add",
+            inputs=[original_output, epsilon_name],
+            outputs=[shifted_output],
+        )
+        graph.node.append(add_node)
+
+        # Update the graph output to point to the shifted tensor
+        graph.output[0].name = shifted_output
+        # Update the type/shape info to match
+        shifted_type = onnx.helper.make_tensor_value_info(
+            shifted_output,
+            TensorProto.FLOAT,
+            [None, 1],
+        )
+        graph.output.pop()
+        graph.output.append(shifted_type)
+
+    onnx.save(onnx_model, out_path)
+    print(f"Saved ONNX model to: {out_path}" + (" (with positive clamp)" if positive_clamp else ""))
     return onnx_model
 
 

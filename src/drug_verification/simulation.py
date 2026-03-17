@@ -90,7 +90,7 @@ def simulate_patient(
         D_t = compute_dose(temp, wbc, conc, D_prev, cfg)
         D_prev = D_t
 
-        X_patient.append([conc, temp, wbc, patient.age, patient.weight, D_prev])
+        X_patient.append([conc, temp, wbc, patient.age, patient.weight])
         y_patient.append(D_t)
 
         # Update PK/PD state
