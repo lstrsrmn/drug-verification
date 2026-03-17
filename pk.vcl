@@ -133,7 +133,7 @@ safeInput x =
     0 <= x ! dprev <= 1500
 
 nonNegOutput : InputVector -> Bool
-nonNegOutput x =  0 < (normpk x) ! 0
+nonNegOutput x =  0 <= (normpk x) ! 0
 
 @property
 nonNeg : Bool

@@ -4,6 +4,7 @@ import tensorflow as tf
 from tensorflow.keras import models, layers
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+import idx2numpy
 
 from . import constants as C
 
@@ -95,32 +96,42 @@ def update_vcl_scaler(scaler, spec_path="pk.vcl"):
     mean_str = ", ".join(f"{v:.8g}" for v in scaler.mean_)
     std_str = ", ".join(f"{v:.8g}" for v in scaler.scale_)
 
-    with open(spec_path, "r") as f:
-        content = f.read()
+    # Use .idx files instead for portability and to not have to overwrite a file
+    # with open(spec_path, "r") as f:
+    #     content = f.read()
 
-    # Replace the value lines; patterns are anchored to the assignment so that
-    # the type declaration lines above them are left untouched.
-    content = re.sub(
-        r"(meanScalingValues\s*=\s*)\[.*?\]",
-        rf"\g<1>[{mean_str}]",
-        content,
-    )
-    content = re.sub(
-        r"(standardDeviationValues\s*=\s*)\[.*?\]",
-        rf"\g<1>[{std_str}]",
-        content,
-    )
+    # # Replace the value lines; patterns are anchored to the assignment so that
+    # # the type declaration lines above them are left untouched.
+    # content = re.sub(
+    #     r"(meanScalingValues\s*=\s*)\[.*?\]",
+    #     rf"\g<1>[{mean_str}]",
+    #     content,
+    # )
+    # content = re.sub(
+    #     r"(standardDeviationValues\s*=\s*)\[.*?\]",
+    #     rf"\g<1>[{std_str}]",
+    #     content,
+    # )
 
-    with open(spec_path, "w") as f:
-        f.write(content)
+    # with open(spec_path, "w") as f:
+    #     f.write(content)
 
     print(f"Updated {spec_path} with scaler values from this training run.")
     print(f"  meanScalingValues        = [{mean_str}]")
     print(f"  standardDeviationValues  = [{std_str}]")
+    idx2numpy.convert_to_file("pk_mean.idx", scaler.mean_)
+    idx2numpy.convert_to_file("pk_std.idx", scaler.scale_)
 
 
 def export_onnx(model, out_path="pk.onnx"):
     """Export a Keras model to ONNX format."""
+    import numpy as np
+    dummy_input = np.zeros((1, 6), dtype="float32")
+    
+    # 2. Call the model once. This 'builds' the internal graph.
+    _ = model(dummy_input)
+    model.export(out_path, format="onnx")
+    return
     import tf2onnx
 
     onnx_model, _ = tf2onnx.convert.from_keras(model, output_path=out_path)
