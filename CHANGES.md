@@ -91,3 +91,39 @@ Measured on 50 patients, 50 epochs, identical seed:
 
 Formal verification with Vehicle + Marabou confirmed all 9 properties in
 `pk.vcl` still hold against the rebuilt `marabou_zero.onnx` (6-input) model.
+
+### Environment
+
+- **Python:** 3.13.12
+- **Virtual environment:** `venv313` (Python 3.13)
+- **Key packages:**
+  - `vehicle-lang==0.24.0`
+  - `tensorflow==2.21.0`
+  - `torch==2.10.0`
+  - `scikit-learn==1.8.0`
+  - `onnxruntime==1.24.3`
+
+Setup:
+```bash
+python3.13 -m venv venv313
+source venv313/bin/activate
+pip install -e .
+```
+
+### Commands
+
+Train:
+```bash
+source venv313/bin/activate
+pk train
+```
+
+Verify:
+```bash
+source venv313/bin/activate
+vehicle verify -v Marabou -s pk.vcl -n pk:marabou_zero.onnx -c cache \
+  -p Ka:4.5 -p Ke:3.5 -p Vd:10 -p C_safe:30 -p ttd:2 \
+  -p Ka_over:0.3228 -p Ka_under:0.3227 \
+  -p Ke_over:0.415 -p Ke_under:0.4149 \
+  -p eps:0.001
+```
