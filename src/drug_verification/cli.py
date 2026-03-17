@@ -218,7 +218,7 @@ def build_parser():
 
     # test
     p_test = sub.add_parser("test", help="Build zero-weight ONNX model for formal verification")
-    p_test.add_argument("--input-size", type=int, default=6, help="Input dimension for the model (default: 5)")
+    p_test.add_argument("--input-size", type=int, default=5, help="Input dimension for the model (default: 5)")
     p_test.add_argument("--output-path", default="pk.onnx", help="Path where ONNX model will be saved (default: pk.onnx)")
     p_test.add_argument("--validate", action="store_true", help="Validate generated model with onnxruntime")
 

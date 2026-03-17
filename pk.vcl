@@ -1,12 +1,11 @@
-type UnnormalisedInputVector = Tensor Real [6]
-type InputVector = Tensor Real [6]
+type UnnormalisedInputVector = Tensor Real [5]
+type InputVector = Tensor Real [5]
 
 conc = 0
 temp = 1
 wbc = 2
 age = 3
 weight = 4
-dprev = 5
 
 type OutputVector= Tensor Real [1]
 
@@ -16,10 +15,10 @@ type OutputVector= Tensor Real [1]
 -- divergence means verification applies to different normalisation than the
 -- exported ONNX model uses, silently invalidating the formal proof.
 meanScalingValues : UnnormalisedInputVector
-meanScalingValues = [13.434305, 37.730657, 11.876029, 50.803191, 76.441588, 47.557677]
+meanScalingValues = [13.434305, 37.730657, 11.876029, 50.803191, 76.441588]
 
 standardDeviationValues : UnnormalisedInputVector
-standardDeviationValues =  [7.3122337, 0.62039077, 2.5428018, 23.166708, 14.39579, 99.915869]
+standardDeviationValues =  [7.3122337, 0.62039077, 2.5428018, 23.166708, 14.39579]
 
 normalise : UnnormalisedInputVector -> InputVector
 normalise x = foreach i .
@@ -93,8 +92,7 @@ safeFarInput x =
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100 and
-    0 <= x ! dprev <= 1500
+    50 <= x ! weight <= 100
 
 safeFarOutput : InputVector -> Bool
 safeFarOutput x = let y = ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
@@ -113,8 +111,7 @@ safeNearInput x =
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100 and
-    0 <= x ! dprev <= 1500
+    50 <= x ! weight <= 100
 
 safeNearOutput : InputVector -> Bool
 safeNearOutput x = ((normpk x) ! 0) < eps
@@ -129,8 +126,7 @@ safeInput x =
     36.5 <= x ! temp <= 40 and
     7.5 <= x ! wbc <= 20 and
     18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100 and
-    0 <= x ! dprev <= 1500
+    50 <= x ! weight <= 100
 
 nonNegOutput : InputVector -> Bool
 nonNegOutput x =  0 < (normpk x) ! 0
