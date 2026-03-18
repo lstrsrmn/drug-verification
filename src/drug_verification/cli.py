@@ -177,7 +177,7 @@ def build_parser():
     def add_train_args(p):
         p.add_argument("--epochs", type=int, default=C.DEFAULT_EPOCHS)
         p.add_argument("--batch-size", type=int, default=C.DEFAULT_BATCH_SIZE)
-        p.add_argument("--save-model", type=str, default=None, help="Path to save Keras model")
+        p.add_argument("--save-model", type=str, default="pk.keras", help="Path to save Keras model")
         p.add_argument("--vehicle-loss", action="store_true", help="Enable Vehicle spec constraint loss")
         p.add_argument("--property", type=str, default="safeNear", help="Vehicle property to train against (default: safeNear)")
         p.add_argument("--alpha", type=float, default=0.5, help="Task loss weight (1-alpha for constraint)")
