@@ -23,6 +23,7 @@ class SimulationConfig:
 
     # Baseline PK/PD
     ke: float = 0.1
+    ka: float = 0.2
     Vd: float = 30.0
     b_temp: float = 0.005
     c_wbc: float = 0.02
@@ -47,6 +48,7 @@ class SimulationConfig:
 class EffectiveParams:
     """Patient-specific effective PK/PD parameters after covariate adjustment."""
     ke_eff: float
+    ka_eff: float
     Vd_eff: float
     a_temp_inf_eff: float
     a_wbc_inf_eff: float

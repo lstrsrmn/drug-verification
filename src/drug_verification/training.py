@@ -189,7 +189,7 @@ def train_model_with_constraint(
     y_val,
     constraint_fn,
     parameters: dict[str, float],
-    alpha=0.5,
+    alpha=0.0,
     epochs=C.DEFAULT_EPOCHS,
     batch_size=C.DEFAULT_BATCH_SIZE,
 ):
@@ -228,7 +228,8 @@ def train_model_with_constraint(
                 preds = model(x_batch, training=True)
                 task_loss = tf.reduce_mean(tf.square(preds - y_batch))
 
-                constraint_loss = constraint_fn(network_fn, parameters["C_safe"], parameters["eps"])
+                print(type(constraint_fn))
+                constraint_loss = constraint_fn()# parameters["mean"], parameters["std_dev"], network_fn, parameters["C_safe"], parameters["eps"])
 
                 total_loss = alpha * task_loss + (1 - alpha) * constraint_loss
 

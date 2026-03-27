@@ -2,7 +2,8 @@
 
 # --- Simulation parameters ---
 TIMESTEPS = 48
-DT = 0.5          # hours per timestep
+# DT = 0.5          # hours per timestep
+DT = 12
 NUM_PATIENTS = 50
 
 # --- Baseline PK/PD parameters ---
@@ -32,6 +33,7 @@ WEIGHT_RANGE = (50.0, 100.0)
 
 # --- Covariate adjustment factors ---
 AGE_KE_FACTOR = 0.004       # ke reduction per year above 50
+AGE_KA_FACTOR = 0.004       # ke reduction per year above 50
 AGE_REFERENCE = 50           # reference age for covariate adjustments
 WEIGHT_REFERENCE = 70.0      # reference weight (kg) for Vd scaling
 SEX_INFECTION_FACTOR = 1.1   # female infection effect multiplier

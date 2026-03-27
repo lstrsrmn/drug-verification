@@ -34,9 +34,9 @@ def load_drug_verification_constraints(
     declarations = loss_tf.load_specification(
         spec_path,
         logic=logic,
-        declarations=properties or (),
+        declarations=(),# properties or (),
     )
 
-    if properties:
-        return {name: declarations[name] for name in properties if name in declarations}
+    # if properties:
+    #     return {name: declarations[name] for name in properties if name in declarations}
     return dict(declarations)

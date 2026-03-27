@@ -1,6 +1,7 @@
 """PK/PD patient simulation — generates state-action training data."""
 
 import numpy as np
+import math
 
 from .types import PatientCovariates, EffectiveParams, SimulationConfig
 from . import constants as C
@@ -22,6 +23,7 @@ def compute_effective_params(
 ) -> EffectiveParams:
     """Derive patient-specific PK/PD parameters from covariates."""
     ke_eff = cfg.ke * (1 - C.AGE_KE_FACTOR * (patient.age - C.AGE_REFERENCE))
+    ka_eff = cfg.ka * (1 - C.AGE_KA_FACTOR * (patient.age - C.AGE_REFERENCE))
     Vd_eff = cfg.Vd * (patient.weight / C.WEIGHT_REFERENCE)
 
     sex_mult = C.SEX_INFECTION_FACTOR if patient.sex == 1 else 1.0
@@ -42,6 +44,7 @@ def compute_effective_params(
 
     return EffectiveParams(
         ke_eff=ke_eff,
+        ka_eff=ka_eff,
         Vd_eff=Vd_eff,
         a_temp_inf_eff=a_temp_inf_eff,
         a_wbc_inf_eff=a_wbc_inf_eff,
@@ -77,6 +80,9 @@ def simulate_patient(
     """Run one patient through the PK/PD simulation.
 
     Returns (X, y) where X has shape (timesteps-1, 5) and y has shape (timesteps-1,).
+
+    Changes:
+    Now, this generates data for every hour, but a dose is only ever given every 12 hours
     """
     conc = C.INITIAL_C
     temp = rng.uniform(*C.INITIAL_T_RANGE)
@@ -86,16 +92,25 @@ def simulate_patient(
     X_patient = []
     y_patient = []
 
-    for _ in range(cfg.timesteps - 1):
+    # This is the concentration from dose d at time t
+    curve = lambda d: lambda t: max(0, ((d * params.ka_eff)/(params.Vd_eff * (params.ka_eff - params.ke_eff))) * (math.exp(-params.ke_eff * t) - math.exp(-params.ka_eff * t)))
+    # This is the total concentration of list ds at time t
+    curve_funcs = lambda ds: lambda t: lambda ttd: list(map(lambda i: curve(ds[i])(t - i * ttd), list(range(len(ds)))))
+
+    for i in range(cfg.timesteps - 1):
         D_t = compute_dose(temp, wbc, conc, D_prev, cfg)
         D_prev = D_t
 
         X_patient.append([conc, temp, wbc, patient.age, patient.weight])
         y_patient.append(D_t)
 
+        ttd = 12
+        # y_patient is the list ds of doses given, the t argument is the time of the ith dose + the time to reach the peak concentration, and then time between doses (ttd)
+        C_next = sum(curve_funcs(y_patient)(i * ttd + (math.log(params.ka_eff/params.ke_eff)/(params.ka_eff - params.ke_eff)))(ttd))
+
         # Update PK/PD state
-        C_next = conc + cfg.dt * (-params.ke_eff * conc + D_t / params.Vd_eff)
-        C_next = max(0, C_next)
+        # C_next = conc + cfg.dt * (-params.ke_eff * conc + D_t / params.Vd_eff)
+        # C_next = max(0, C_next)
 
         T_next = temp + cfg.dt * (
             params.k_inf_T_eff

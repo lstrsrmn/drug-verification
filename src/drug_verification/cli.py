@@ -63,6 +63,8 @@ def cmd_train(args):
             for kv in args.params:
                 key, value = kv.split(":", 1)
                 parameters[key] = float(value)
+        parameters["mean"] = scaler.mean_
+        parameters["std_dev"] = scaler.scale_
 
         constraint_fns = load_drug_verification_constraints(
             spec_path=args.spec_path,
@@ -179,7 +181,7 @@ def build_parser():
         p.add_argument("--batch-size", type=int, default=C.DEFAULT_BATCH_SIZE)
         p.add_argument("--save-model", type=str, default=None, help="Path to save Keras model")
         p.add_argument("--vehicle-loss", action="store_true", help="Enable Vehicle spec constraint loss")
-        p.add_argument("--property", type=str, default="safeNear", help="Vehicle property to train against (default: safeNear)")
+        p.add_argument("--property", type=str, default="safeFar", help="Vehicle property to train against (default: safeFar)")
         p.add_argument("--alpha", type=float, default=0.5, help="Task loss weight (1-alpha for constraint)")
         p.add_argument("--spec-path", type=str, default="pk.vcl", help="Path to Vehicle spec file")
         p.add_argument("-p", "--param", dest="params", action="append", metavar="KEY:VALUE",

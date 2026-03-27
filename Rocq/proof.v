@@ -18,7 +18,6 @@ Unset Printing Implicit Defensive.
 
 Require Import Spec.
 
-
 Section Helpers.
 
 Local Open Scope ring_scope.
@@ -746,7 +745,7 @@ case => [_| n IHn] t;
 rewrite /total_conc.
   apply/andP.
   split.
-  rewrite -!sum_apply.
+    rewrite -!sum_apply.
     apply/sumr_ge0 => /= i _.
     rewrite /maxr.
     case: ifP => //.
