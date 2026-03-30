@@ -7,7 +7,9 @@ DT = 12
 NUM_PATIENTS = 50
 
 # --- Baseline PK/PD parameters ---
-KE = 0.1          # baseline elimination rate (per hour)
+KE = 3.5          # baseline elimination rate (per hour)
+KA = 4.5
+TTD = 12
 VD = 30           # baseline volume of distribution (L)
 B_TEMP = 0.005    # drug effect on temperature
 C_WBC = 0.02      # drug effect on WBC
@@ -74,11 +76,11 @@ DEFAULT_SPEC_PARAMS = {
     "Ke": 3.5,
     "Vd": 10,
     "C_safe": 30,
-    "ttd": 2,
     "Ka_over": 0.3228,
     "Ka_under": 0.3227,
     "Ke_over": 0.415,
     "Ke_under": 0.4149,
+    "ttd": 2,
     "eps": 0.001,
 }
 

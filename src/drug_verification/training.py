@@ -227,9 +227,12 @@ def train_model_with_constraint(
             with tf.GradientTape() as tape:
                 preds = model(x_batch, training=True)
                 task_loss = tf.reduce_mean(tf.square(preds - y_batch))
-
-                print(type(constraint_fn))
-                constraint_loss = constraint_fn()# parameters["mean"], parameters["std_dev"], network_fn, parameters["C_safe"], parameters["eps"])
+                parameters.pop("Ka_over")
+                parameters.pop("Ke_under")
+                parameters.pop("ttd")
+                parameters.pop("eps")
+                constraint_loss = constraint_fn(pk=network_fn,
+                                                **parameters)
 
                 total_loss = alpha * task_loss + (1 - alpha) * constraint_loss
 

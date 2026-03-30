@@ -22,9 +22,10 @@ class SimulationConfig:
     seed: int = 42
 
     # Baseline PK/PD
-    ke: float = 0.1
-    ka: float = 0.2
+    ke: float = 4.5
+    ka: float = 3.5
     Vd: float = 30.0
+    ttd: float = 12.0
     b_temp: float = 0.005
     c_wbc: float = 0.02
     a_temp_inf: float = 0.05

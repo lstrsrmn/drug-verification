@@ -104,9 +104,8 @@ def simulate_patient(
         X_patient.append([conc, temp, wbc, patient.age, patient.weight])
         y_patient.append(D_t)
 
-        ttd = 12
         # y_patient is the list ds of doses given, the t argument is the time of the ith dose + the time to reach the peak concentration, and then time between doses (ttd)
-        C_next = sum(curve_funcs(y_patient)(i * ttd + (math.log(params.ka_eff/params.ke_eff)/(params.ka_eff - params.ke_eff)))(ttd))
+        C_next = sum(curve_funcs(y_patient)(i * cfg.ttd + (math.log(params.ka_eff/params.ke_eff)/(params.ka_eff - params.ke_eff)))(cfg.ttd))
 
         # Update PK/PD state
         # C_next = conc + cfg.dt * (-params.ke_eff * conc + D_t / params.Vd_eff)
