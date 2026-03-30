@@ -163,6 +163,21 @@ def cmd_all(args):
     cmd_plot(args)
 
 
+def cmd_tune(args):
+    """Run Optuna tuning for constrained (Vehicle-loss) training."""
+    from drug_verification.tuning import run_vehicle_loss_study
+
+    result = run_vehicle_loss_study(args)
+    summary = result["summary"]
+
+    print("\nTuning complete.")
+    print(f"  Study: {summary['study_name']}")
+    print(f"  Best trial: {summary['best_trial_number']}")
+    print(f"  Best objective: {summary['best_value']:.6f}")
+    print(f"  Best params written to: {result['best_params_path']}")
+    print(f"  Trials table written to: {result['trials_csv_path']}")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="pk",
@@ -182,7 +197,12 @@ def build_parser():
         p.add_argument("--save-model", type=str, default=None, help="Path to save Keras model")
         p.add_argument("--vehicle-loss", action="store_true", help="Enable Vehicle spec constraint loss")
         p.add_argument("--property", type=str, default="safeFar", help="Vehicle property to train against (default: safeFar)")
-        p.add_argument("--alpha", type=float, default=0.5, help="Task loss weight (1-alpha for constraint)")
+        p.add_argument(
+            "--alpha",
+            type=float,
+            default=C.DEFAULT_GRADNORM_ALPHA,
+            help="GradNorm asymmetry hyperparameter α for constrained training",
+        )
         p.add_argument("--spec-path", type=str, default="pk.vcl", help="Path to Vehicle spec file")
         p.add_argument("-p", "--param", dest="params", action="append", metavar="KEY:VALUE",
                        help="Override a Vehicle parameter (e.g. -p Ka:4.5). Can be repeated.")
@@ -224,6 +244,64 @@ def build_parser():
     p_test.add_argument("--output-path", default="pk.onnx", help="Path where ONNX model will be saved (default: pk.onnx)")
     p_test.add_argument("--validate", action="store_true", help="Validate generated model with onnxruntime")
 
+    # tune
+    p_tune = sub.add_parser("tune", help="Run Optuna tuning for Vehicle-loss constrained training")
+    add_common(p_tune)
+    p_tune.add_argument("--epochs", type=int, default=C.DEFAULT_EPOCHS)
+    p_tune.add_argument("--property", type=str, default="safeFar", help="Vehicle property to train against (default: safeFar)")
+    p_tune.add_argument("--spec-path", type=str, default="pk.vcl", help="Path to Vehicle spec file")
+    p_tune.add_argument(
+        "-p",
+        "--param",
+        dest="params",
+        action="append",
+        metavar="KEY:VALUE",
+        help="Override a Vehicle parameter (e.g. -p Ka:4.5). Can be repeated.",
+    )
+    p_tune.add_argument("--n-trials", type=int, default=C.DEFAULT_OPTUNA_N_TRIALS)
+    p_tune.add_argument(
+        "--timeout",
+        type=int,
+        default=C.DEFAULT_OPTUNA_TIMEOUT_SECONDS,
+        help="Max tuning runtime in seconds",
+    )
+    p_tune.add_argument(
+        "--storage",
+        type=str,
+        default=C.DEFAULT_OPTUNA_STORAGE,
+        help="Optuna storage URL (use sqlite:///file.db for local persistence)",
+    )
+    p_tune.add_argument(
+        "--study-name",
+        type=str,
+        default=C.DEFAULT_OPTUNA_STUDY_NAME,
+        help="Name of the Optuna study (resumed if it already exists)",
+    )
+    p_tune.add_argument(
+        "--pruner",
+        choices=["median", "hyperband", "none"],
+        default=C.DEFAULT_OPTUNA_PRUNER,
+        help="Pruner strategy for early-stopping trials",
+    )
+    p_tune.add_argument(
+        "--objective-constraint-weight",
+        type=float,
+        default=C.DEFAULT_TUNE_CONSTRAINT_OBJECTIVE_WEIGHT,
+        help="Weight λ in objective = val_loss + λ * constraint_loss",
+    )
+    p_tune.add_argument(
+        "--best-params-out",
+        type=str,
+        default="optuna_best_params.json",
+        help="Output JSON path for best trial summary",
+    )
+    p_tune.add_argument(
+        "--trials-csv-out",
+        type=str,
+        default="optuna_trials.csv",
+        help="Output CSV path for all trial summaries",
+    )
+
     return parser
 
 
@@ -238,6 +316,7 @@ def main(argv=None):
         "export": cmd_export,
         "test": cmd_test,
         "all": cmd_all,
+        "tune": cmd_tune,
     }
     commands[args.command](args)
 

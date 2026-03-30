@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 import idx2numpy
 
 from . import constants as C
+from .grad_norm import GradNorm
 
 
 def build_model(input_size, hidden_sizes=C.DEFAULT_HIDDEN_SIZES):
@@ -91,7 +92,6 @@ def update_vcl_scaler(scaler, spec_path="pk.vcl"):
         scaler: A fitted sklearn StandardScaler.
         spec_path: Path to the .vcl file to update.
     """
-    import re
 
     mean_str = ", ".join(f"{v:.8g}" for v in scaler.mean_)
     std_str = ", ".join(f"{v:.8g}" for v in scaler.scale_)
@@ -189,14 +189,21 @@ def train_model_with_constraint(
     y_val,
     constraint_fn,
     parameters: dict[str, float],
-    alpha=0.0,
+    alpha=C.DEFAULT_GRADNORM_ALPHA,
+    gradnorm_lr=C.DEFAULT_GRADNORM_WEIGHT_LR,
+    initial_constraint_weight=C.DEFAULT_INITIAL_CONSTRAINT_WEIGHT,
+    optimizer_lr=C.DEFAULT_OPTIMIZER_LR,
+    objective_constraint_weight=C.DEFAULT_TUNE_CONSTRAINT_OBJECTIVE_WEIGHT,
+    trial=None,
     epochs=C.DEFAULT_EPOCHS,
     batch_size=C.DEFAULT_BATCH_SIZE,
+    verbose=True,
 ):
-    """Train with combined task loss + a single Vehicle constraint loss.
+    """Train with task loss + Vehicle constraint loss balanced by GradNorm.
 
     Uses a custom tf.GradientTape loop so that the Vehicle specification
-    loss can be backpropagated alongside the standard MSE loss.
+    loss can be backpropagated alongside the standard MSE loss with
+    adaptive weighting.
 
     Args:
         model: Keras model.
@@ -204,44 +211,83 @@ def train_model_with_constraint(
         X_val, y_val: Validation data.
         constraint_fn: Callable loss function for a single Vehicle property.
         parameters: Dictionary of parameters for the constraint function.
-        alpha: Weight for task loss; (1-alpha) for constraint loss.
+        alpha: GradNorm restoring-force exponent from Chen et al. (2018).
+        gradnorm_lr: Learning rate for GradNorm's task-weight optimizer.
+        initial_constraint_weight: Initial relative weight for constraint loss.
+        optimizer_lr: Learning rate for model parameter optimizer.
+        objective_constraint_weight: Coefficient for constraint loss when computing
+            per-epoch objective metric (useful for tuning/pruning).
+        trial: Optional Optuna trial-like object with report()/should_prune().
         epochs: Number of training epochs.
         batch_size: Batch size.
+        verbose: Whether to print per-epoch logs.
 
     Returns:
-        dict with training history (task_loss, constraint_loss, total_loss per epoch).
+        dict with training history (task/constraint/total losses, validation loss,
+        GradNorm loss, objective metric, and adaptive task weights per epoch).
     """
-    optimizer = tf.keras.optimizers.Adam()
+    optimizer = tf.keras.optimizers.Adam(learning_rate=optimizer_lr)
     dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
     dataset = dataset.shuffle(len(X_train)).batch(batch_size)
+    grad_norm = GradNorm(
+        alpha=alpha,
+        weight_lr=gradnorm_lr,
+        initial_constraint_weight=initial_constraint_weight,
+    )
+
+    constraint_parameters = {
+        key: value
+        for key, value in parameters.items()
+        if key not in C.CONSTRAINT_PARAM_EXCLUSIONS
+    }
 
     def network_fn(x):
         return tf.reshape(model(tf.reshape(x, [1, -1]), training=True), [-1])
 
-    history = {"task_loss": [], "constraint_loss": [], "total_loss": [], "val_loss": []}
+    history = {
+        "task_loss": [],
+        "constraint_loss": [],
+        "total_loss": [],
+        "val_loss": [],
+        "grad_norm_loss": [],
+        "objective_metric": [],
+        "task_weight": [],
+        "constraint_weight": [],
+    }
 
     for epoch in range(epochs):
-        epoch_task, epoch_constraint, epoch_total, n_batches = 0.0, 0.0, 0.0, 0
+        epoch_task, epoch_constraint, epoch_total, epoch_grad_norm, n_batches = 0.0, 0.0, 0.0, 0.0, 0
+        epoch_task_weight, epoch_constraint_weight = 0.0, 0.0
 
         for x_batch, y_batch in dataset:
-            with tf.GradientTape() as tape:
+            with tf.GradientTape(persistent=True) as tape:
                 preds = model(x_batch, training=True)
                 task_loss = tf.reduce_mean(tf.square(preds - y_batch))
-                parameters.pop("Ka_over")
-                parameters.pop("Ke_under")
-                parameters.pop("ttd")
-                parameters.pop("eps")
-                constraint_loss = constraint_fn(pk=network_fn,
-                                                **parameters)
+                constraint_loss = tf.cast(
+                    tf.reduce_mean(constraint_fn(pk=network_fn, **constraint_parameters)),
+                    tf.float32,
+                )
 
-                total_loss = alpha * task_loss + (1 - alpha) * constraint_loss
+            batch_info = grad_norm.balance(
+                task_loss=task_loss,
+                constraint_loss=constraint_loss,
+                tape=tape,
+                model_optimizer=optimizer,
+                model_variables=model.trainable_variables,
+            )
+            del tape
 
-            grads = tape.gradient(total_loss, model.trainable_variables)
-            optimizer.apply_gradients(zip(grads, model.trainable_variables))
+            total_loss = batch_info["total_loss"]
+            grad_norm_loss = batch_info["grad_norm_loss"]
+            task_weight = batch_info["task_weight"]
+            constraint_weight = batch_info["constraint_weight"]
 
-            epoch_task += task_loss.numpy()
-            epoch_constraint += constraint_loss.numpy()
-            epoch_total += total_loss.numpy()
+            epoch_task += float(task_loss.numpy())
+            epoch_constraint += float(constraint_loss.numpy())
+            epoch_total += float(total_loss.numpy())
+            epoch_grad_norm += float(grad_norm_loss.numpy())
+            epoch_task_weight += float(task_weight.numpy())
+            epoch_constraint_weight += float(constraint_weight.numpy())
             n_batches += 1
 
         # Validation loss
@@ -252,13 +298,31 @@ def train_model_with_constraint(
         history["constraint_loss"].append(epoch_constraint / n_batches)
         history["total_loss"].append(epoch_total / n_batches)
         history["val_loss"].append(val_loss)
-
-        print(
-            f"Epoch {epoch + 1}/{epochs} — "
-            f"task: {epoch_task / n_batches:.4f}, "
-            f"constraint: {epoch_constraint / n_batches:.4f}, "
-            f"total: {epoch_total / n_batches:.4f}, "
-            f"val: {val_loss:.4f}"
+        history["grad_norm_loss"].append(epoch_grad_norm / n_batches)
+        objective_metric = float(val_loss) + float(objective_constraint_weight) * float(
+            epoch_constraint / n_batches
         )
+        history["objective_metric"].append(objective_metric)
+        history["task_weight"].append(epoch_task_weight / n_batches)
+        history["constraint_weight"].append(epoch_constraint_weight / n_batches)
+
+        if trial is not None:
+            trial.report(objective_metric, step=epoch)
+            if trial.should_prune():
+                import optuna
+
+                raise optuna.TrialPruned()
+
+        if verbose:
+            print(
+                f"Epoch {epoch + 1}/{epochs} — "
+                f"task: {epoch_task / n_batches:.4f}, "
+                f"constraint: {epoch_constraint / n_batches:.4f}, "
+                f"total: {epoch_total / n_batches:.4f}, "
+                f"gradnorm: {epoch_grad_norm / n_batches:.4f}, "
+                f"objective: {objective_metric:.4f}, "
+                f"weights: ({epoch_task_weight / n_batches:.3f}, {epoch_constraint_weight / n_batches:.3f}), "
+                f"val: {val_loss:.4f}"
+            )
 
     return history

@@ -13,8 +13,10 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "tensorflow>=2.21.0",
     "torch>=2.10.0",
-    "vehicle-lang",
     "tf2onnx",
+    "optuna>=4.8.0",
+    "idx2numpy>=1.2.3",
+    "vehicle-lang",
 ]
 
 [project.scripts]
