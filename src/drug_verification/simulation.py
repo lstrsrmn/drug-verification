@@ -105,8 +105,12 @@ def simulate_patient(
         y_patient.append(D_t)
 
         ttd = 12
-        # y_patient is the list ds of doses given, the t argument is the time of the ith dose + the time to reach the peak concentration, and then time between doses (ttd)
-        C_next = sum(curve_funcs(y_patient)(i * ttd + (math.log(params.ka_eff/params.ke_eff)/(params.ka_eff - params.ke_eff)))(ttd))
+        # C_next is the trough concentration at the START of the next dosing interval
+        # (i.e. at time (i+1)*ttd from t=0), which is what the patient presents
+        # when the next dose decision is made.  This matches the semantics of
+        # `x ! conc` in the Vehicle safeFarInput predicate, which is the plasma
+        # concentration BEFORE the next dose is administered.
+        C_next = sum(curve_funcs(y_patient)((i + 1) * ttd)(ttd))
 
         # Update PK/PD state
         # C_next = conc + cfg.dt * (-params.ke_eff * conc + D_t / params.Vd_eff)
