@@ -188,12 +188,15 @@ def train_model_with_constraint(
     X_val,
     y_val,
     constraint_fn,
+    constraint2_fn,
     parameters: dict[str, float],
     alpha=C.DEFAULT_GRADNORM_ALPHA,
     gradnorm_lr=C.DEFAULT_GRADNORM_WEIGHT_LR,
     initial_constraint_weight=C.DEFAULT_INITIAL_CONSTRAINT_WEIGHT,
+    initial_constraint2_weight=C.DEFAULT_INITIAL_CONSTRAINT2_WEIGHT,
     optimizer_lr=C.DEFAULT_OPTIMIZER_LR,
     objective_constraint_weight=C.DEFAULT_TUNE_CONSTRAINT_OBJECTIVE_WEIGHT,
+    objective_constraint2_weight=C.DEFAULT_TUNE_CONSTRAINT2_OBJECTIVE_WEIGHT,
     trial=None,
     epochs=C.DEFAULT_EPOCHS,
     batch_size=C.DEFAULT_BATCH_SIZE,
@@ -233,12 +236,18 @@ def train_model_with_constraint(
         alpha=alpha,
         weight_lr=gradnorm_lr,
         initial_constraint_weight=initial_constraint_weight,
+        initial_constraint2_weight=initial_constraint2_weight,
     )
 
     constraint_parameters = {
         key: value
         for key, value in parameters.items()
         if key not in C.CONSTRAINT_PARAM_EXCLUSIONS
+    }
+    constraint2_parameters = {
+        key: value
+        for key, value in parameters.items()
+        if key not in C.CONSTRAINT2_PARAM_EXCLUSIONS
     }
 
     def network_fn(x):
@@ -247,17 +256,19 @@ def train_model_with_constraint(
     history = {
         "task_loss": [],
         "constraint_loss": [],
+        "constraint2_loss": [],
         "total_loss": [],
         "val_loss": [],
         "grad_norm_loss": [],
         "objective_metric": [],
         "task_weight": [],
         "constraint_weight": [],
+        "constraint2_weight": [],
     }
 
     for epoch in range(epochs):
-        epoch_task, epoch_constraint, epoch_total, epoch_grad_norm, n_batches = 0.0, 0.0, 0.0, 0.0, 0
-        epoch_task_weight, epoch_constraint_weight = 0.0, 0.0
+        epoch_task, epoch_constraint, epoch_constraint2, epoch_total, epoch_grad_norm, n_batches = 0.0, 0.0, 0.0, 0.0, 0.0, 0
+        epoch_task_weight, epoch_constraint_weight, epoch_constraint2_weight = 0.0, 0.0, 0.0
 
         for x_batch, y_batch in dataset:
             with tf.GradientTape(persistent=True) as tape:
@@ -267,10 +278,15 @@ def train_model_with_constraint(
                     tf.reduce_mean(constraint_fn(pk=network_fn, **constraint_parameters)),
                     tf.float32,
                 )
+                constraint2_loss = tf.cast(
+                    tf.reduce_mean(constraint2_fn(pk=network_fn, **constraint2_parameters)),
+                    tf.float32,
+                )
 
             batch_info = grad_norm.balance(
                 task_loss=task_loss,
                 constraint_loss=constraint_loss,
+                constraint2_loss=constraint2_loss,
                 tape=tape,
                 model_optimizer=optimizer,
                 model_variables=model.trainable_variables,
@@ -281,13 +297,16 @@ def train_model_with_constraint(
             grad_norm_loss = batch_info["grad_norm_loss"]
             task_weight = batch_info["task_weight"]
             constraint_weight = batch_info["constraint_weight"]
+            constraint2_weight = batch_info["constraint2_weight"]
 
             epoch_task += float(task_loss.numpy())
             epoch_constraint += float(constraint_loss.numpy())
+            epoch_constraint2 += float(constraint2_loss.numpy())
             epoch_total += float(total_loss.numpy())
             epoch_grad_norm += float(grad_norm_loss.numpy())
             epoch_task_weight += float(task_weight.numpy())
             epoch_constraint_weight += float(constraint_weight.numpy())
+            epoch_constraint2_weight += float(constraint2_weight.numpy())
             n_batches += 1
 
         # Validation loss
@@ -296,15 +315,20 @@ def train_model_with_constraint(
 
         history["task_loss"].append(epoch_task / n_batches)
         history["constraint_loss"].append(epoch_constraint / n_batches)
+        history["constraint2_loss"].append(epoch_constraint2 / n_batches)
         history["total_loss"].append(epoch_total / n_batches)
         history["val_loss"].append(val_loss)
         history["grad_norm_loss"].append(epoch_grad_norm / n_batches)
         objective_metric = float(val_loss) + float(objective_constraint_weight) * float(
             epoch_constraint / n_batches
         )
+        objective_metric = float(val_loss) + float(objective_constraint2_weight) * float(
+            epoch_constraint2 / n_batches
+        )
         history["objective_metric"].append(objective_metric)
         history["task_weight"].append(epoch_task_weight / n_batches)
         history["constraint_weight"].append(epoch_constraint_weight / n_batches)
+        history["constraint2_weight"].append(epoch_constraint2_weight / n_batches)
 
         if trial is not None:
             trial.report(objective_metric, step=epoch)
@@ -318,10 +342,11 @@ def train_model_with_constraint(
                 f"Epoch {epoch + 1}/{epochs} — "
                 f"task: {epoch_task / n_batches:.4f}, "
                 f"constraint: {epoch_constraint / n_batches:.4f}, "
+                f"constraint2: {epoch_constraint2 / n_batches:.4f}, "
                 f"total: {epoch_total / n_batches:.4f}, "
                 f"gradnorm: {epoch_grad_norm / n_batches:.4f}, "
                 f"objective: {objective_metric:.4f}, "
-                f"weights: ({epoch_task_weight / n_batches:.3f}, {epoch_constraint_weight / n_batches:.3f}), "
+                f"weights: ({epoch_task_weight / n_batches:.3f}, {epoch_constraint_weight / n_batches:.3f}, {epoch_constraint2_weight / n_batches:.3f}), "
                 f"val: {val_loss:.4f}"
             )
 

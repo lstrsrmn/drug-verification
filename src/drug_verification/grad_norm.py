@@ -29,18 +29,19 @@ class GradNorm:
         alpha: float,
         weight_lr: float,
         initial_constraint_weight: float = 1.0,
+        initial_constraint2_weight: float = 1.0,
         epsilon: float = 1e-8,
         min_weight: float = 1e-3,
     ):
-        self.n_tasks = 2
+        self.n_tasks = 3
         self.alpha = tf.constant(alpha, dtype=tf.float32)
         self.epsilon = tf.constant(epsilon, dtype=tf.float32)
         self.min_weight = tf.constant(min_weight, dtype=tf.float32)
         self.initial_losses: tf.Tensor | None = None
 
-        initial_task_weight = float(self.n_tasks) - float(initial_constraint_weight)
+        initial_task_weight = float(self.n_tasks) - float(initial_constraint_weight) - float(initial_constraint2_weight)
         init = tf.constant(
-            [initial_task_weight, float(initial_constraint_weight)],
+            [initial_task_weight, float(initial_constraint_weight), float(initial_constraint2_weight)],
             dtype=tf.float32,
         )
         init = self._renormalised_weights(init)
@@ -74,6 +75,7 @@ class GradNorm:
         self,
         task_loss: tf.Tensor,
         constraint_loss: tf.Tensor,
+        constraint2_loss: tf.Tensor,
         tape: tf.GradientTape,
         model_optimizer: tf.keras.optimizers.Optimizer,
         model_variables: list[tf.Variable],
@@ -83,6 +85,7 @@ class GradNorm:
         Args:
             task_loss: Prediction/task objective.
             constraint_loss: Constraint objective.
+            constraint2_loss: 2nd Constraint objective.
             tape: Persistent gradient tape that recorded both losses.
             model_optimizer: Optimizer for model parameters.
             model_variables: Trainable model parameters.
@@ -91,7 +94,7 @@ class GradNorm:
             Dictionary containing total/auxiliary losses and current weights.
         """
         losses = tf.stack(
-            [tf.cast(task_loss, tf.float32), tf.cast(constraint_loss, tf.float32)]
+            [tf.cast(task_loss, tf.float32), tf.cast(constraint_loss, tf.float32), tf.cast(constraint2_loss, tf.float32)]
         )
 
         if self.initial_losses is None:
@@ -108,10 +111,11 @@ class GradNorm:
         model_grads = tape.gradient(total_loss, model_variables)
         task_grads = tape.gradient(task_loss, model_variables)
         constraint_grads = tape.gradient(constraint_loss, model_variables)
+        constraint2_grads = tape.gradient(constraint2_loss, model_variables)
         self._apply_gradients(model_optimizer, model_grads, model_variables)
 
         base_norms = tf.stack(
-            [_global_l2_norm(task_grads), _global_l2_norm(constraint_grads)]
+            [_global_l2_norm(task_grads), _global_l2_norm(constraint_grads), _global_l2_norm(constraint2_grads)]
         )
         base_norms = tf.stop_gradient(base_norms)
 
@@ -144,4 +148,5 @@ class GradNorm:
             "grad_norm_loss": grad_norm_loss,
             "task_weight": self.weights[0],
             "constraint_weight": self.weights[1],
+            "constraint2_weight": self.weights[2],
         }

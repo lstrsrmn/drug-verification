@@ -76,7 +76,9 @@ DEFAULT_SEED = 42
 DEFAULT_GRADNORM_ALPHA = 0.5
 DEFAULT_GRADNORM_WEIGHT_LR = 1e-3
 DEFAULT_INITIAL_CONSTRAINT_WEIGHT = 1.0
+DEFAULT_INITIAL_CONSTRAINT2_WEIGHT = 1.0
 CONSTRAINT_PARAM_EXCLUSIONS = ("Ka_over", "Ke_under", "ttd", "eps")
+CONSTRAINT2_PARAM_EXCLUSIONS = ("Ka", "Ke", "Vd", "Ka_over", "Ke_under", "Ka_under", "Ke_over", "ttd")
 DEFAULT_OPTIMIZER_LR = 1e-3
 
 # --- Optuna tuning defaults (kept intentionally small for fast research loops) ---
@@ -86,6 +88,7 @@ DEFAULT_OPTUNA_STORAGE = "sqlite:///optuna_vehicle.db"
 DEFAULT_OPTUNA_STUDY_NAME = "vehicle_loss_hpo"
 DEFAULT_OPTUNA_PRUNER = "median"
 DEFAULT_TUNE_CONSTRAINT_OBJECTIVE_WEIGHT = 0.1
+DEFAULT_TUNE_CONSTRAINT2_OBJECTIVE_WEIGHT = 0.1
 
 TUNE_N_LAYERS_RANGE = (1, 3)
 TUNE_UNITS_RANGE = (32, 256)

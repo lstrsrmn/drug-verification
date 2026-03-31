@@ -63,8 +63,8 @@ def cmd_train(args):
             for kv in args.params:
                 key, value = kv.split(":", 1)
                 parameters[key] = float(value)
-        parameters["mean"] = scaler.mean_
-        parameters["std_dev"] = scaler.scale_
+        parameters["meanScalingValues"] = scaler.mean_
+        parameters["standardDeviationValues"] = scaler.scale_
 
         constraint_fns = load_drug_verification_constraints(
             spec_path=args.spec_path,
@@ -72,9 +72,12 @@ def cmd_train(args):
         )
         constraint_fn = constraint_fns[args.property]
         print(f"Training with Vehicle property: {args.property}")
+        constraint2_fn = constraint_fns["safeNear"]
+        print(f"Training with Vehicle property: safeNear")
         history = train_model_with_constraint(
             model, X_train, y_train, X_test, y_test,
             constraint_fn,
+            constraint2_fn,
             parameters,
             alpha=args.alpha,
             epochs=args.epochs,
