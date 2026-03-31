@@ -65,7 +65,7 @@ WBC_CLIP = (1.0, 30.0)      # WBC clipping range (thousand/µL)
 
 # --- Training defaults ---
 DEFAULT_HIDDEN_SIZES = (128, 64)
-DEFAULT_EPOCHS = 50
+DEFAULT_EPOCHS = 100
 DEFAULT_BATCH_SIZE = 32
 DEFAULT_TEST_SIZE = 0.2
 DEFAULT_SEED = 42

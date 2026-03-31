@@ -57,24 +57,29 @@ def cmd_train(args):
     model.summary()
 
     if args.vehicle_loss:
+        import tensorflow as tf
+
         # Build parameters from defaults, overridden by any CLI --param flags
         parameters = dict(C.DEFAULT_SPEC_PARAMS)
         if args.params:
             for kv in args.params:
                 key, value = kv.split(":", 1)
                 parameters[key] = float(value)
-        parameters["mean"] = scaler.mean_
-        parameters["std_dev"] = scaler.scale_
-
         constraint_fns = load_drug_verification_constraints(
             spec_path=args.spec_path,
-            properties=[args.property],
+            properties=["safeFar", "safeNear"],
+            mean=scaler.mean_,
+            std_dev=scaler.scale_,
+            parameters=parameters,
         )
-        constraint_fn = constraint_fns[args.property]
-        print(f"Training with Vehicle property: {args.property}")
+        print(f"Training with Vehicle properties: {list(constraint_fns.keys())}")
+
+        def combined_constraint_fn(network_fn):
+            return tf.add_n([fn(network_fn) for fn in constraint_fns.values()])
+
         history = train_model_with_constraint(
             model, X_train, y_train, X_test, y_test,
-            constraint_fn,
+            combined_constraint_fn,
             parameters,
             alpha=args.alpha,
             epochs=args.epochs,
@@ -148,7 +153,8 @@ def cmd_all(args):
     args.y_out = "dose_targets.csv"
     cmd_simulate(args)
 
-    # Train
+    # Train — always enable Vehicle constraint loss in the full pipeline
+    args.vehicle_loss = True
     args.save_model = args.save_model or "pk_model.keras"
     cmd_train(args)
 
@@ -182,7 +188,7 @@ def build_parser():
         p.add_argument("--save-model", type=str, default=None, help="Path to save Keras model")
         p.add_argument("--vehicle-loss", action="store_true", help="Enable Vehicle spec constraint loss")
         p.add_argument("--property", type=str, default="safeFar", help="Vehicle property to train against (default: safeFar)")
-        p.add_argument("--alpha", type=float, default=0.5, help="Task loss weight (1-alpha for constraint)")
+        p.add_argument("--alpha", type=float, default=0.3, help="Task loss weight (1-alpha for constraint)")
         p.add_argument("--spec-path", type=str, default="pk.vcl", help="Path to Vehicle spec file")
         p.add_argument("-p", "--param", dest="params", action="append", metavar="KEY:VALUE",
                        help="Override a Vehicle parameter (e.g. -p Ka:4.5). Can be repeated.")

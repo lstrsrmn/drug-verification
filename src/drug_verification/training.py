@@ -14,7 +14,7 @@ def build_model(input_size, hidden_sizes=C.DEFAULT_HIDDEN_SIZES):
     layer_list = [layers.Input(shape=(input_size,))]
     for size in hidden_sizes:
         layer_list.append(layers.Dense(size, activation="relu"))
-    layer_list.append(layers.Dense(1, activation="relu"))
+    layer_list.append(layers.Dense(1, activation="linear"))
 
     model = models.Sequential(layer_list)
     model.compile(optimizer="adam", loss="mse", metrics=["mae"])
@@ -147,6 +147,16 @@ def export_onnx(model, out_path="pk.onnx", positive_clamp=True):
         # The current graph output tensor name
         original_output = graph.output[0].name
 
+        # Add Relu to clamp negatives to zero (training uses linear output,
+        # so the exported model must enforce non-negativity explicitly)
+        rectified_output = original_output + "_rectified"
+        relu_node = onnx.helper.make_node(
+            "Relu",
+            inputs=[original_output],
+            outputs=[rectified_output],
+        )
+        graph.node.append(relu_node)
+
         # Add a scalar constant initializer for the epsilon value
         epsilon_name = "positive_clamp_epsilon"
         epsilon_tensor = numpy_helper.from_array(
@@ -154,13 +164,11 @@ def export_onnx(model, out_path="pk.onnx", positive_clamp=True):
         )
         graph.initializer.append(epsilon_tensor)
 
-        # Rename the original output so it's no longer the graph output
+        # Add an Add node: shifted = relu(original) + 0.0001
         shifted_output = original_output + "_shifted"
-
-        # Add an Add node: shifted = original + 0.0001
         add_node = onnx.helper.make_node(
             "Add",
-            inputs=[original_output, epsilon_name],
+            inputs=[rectified_output, epsilon_name],
             outputs=[shifted_output],
         )
         graph.node.append(add_node)
@@ -189,7 +197,7 @@ def train_model_with_constraint(
     y_val,
     constraint_fn,
     parameters: dict[str, float],
-    alpha=0.0,
+    alpha=0.5,
     epochs=C.DEFAULT_EPOCHS,
     batch_size=C.DEFAULT_BATCH_SIZE,
 ):
@@ -228,8 +236,7 @@ def train_model_with_constraint(
                 preds = model(x_batch, training=True)
                 task_loss = tf.reduce_mean(tf.square(preds - y_batch))
 
-                print(type(constraint_fn))
-                constraint_loss = constraint_fn()# parameters["mean"], parameters["std_dev"], network_fn, parameters["C_safe"], parameters["eps"])
+                constraint_loss = constraint_fn(network_fn)
 
                 total_loss = alpha * task_loss + (1 - alpha) * constraint_loss
 
