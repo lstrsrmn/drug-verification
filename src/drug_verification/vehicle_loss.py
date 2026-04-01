@@ -82,8 +82,8 @@ def generate_training_spec(
     Ke_over = parameters["Ke_over"]
     Ka_under = parameters["Ka_under"]
 
-    mean_str = ", ".join(f"{v:.8g}" for v in mean)
-    std_str  = ", ".join(f"{v:.8g}" for v in std_dev)
+    mean_str = ", ".join(f"{v:.10f}" for v in mean)
+    std_str  = ", ".join(f"{v:.10f}" for v in std_dev)
 
     # Resolve the if/else branch at generation time so the compiler sees
     # a single concrete formula with no symbolic conditionals.

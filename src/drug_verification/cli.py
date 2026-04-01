@@ -84,6 +84,8 @@ def cmd_train(args):
             alpha=args.alpha,
             epochs=args.epochs,
             batch_size=args.batch_size,
+            normalise_losses=args.normalise_losses,
+            phase_switch=args.phase_switch,
         )
     else:
         history = train_model(
@@ -189,6 +191,10 @@ def build_parser():
         p.add_argument("--vehicle-loss", action="store_true", help="Enable Vehicle spec constraint loss")
         p.add_argument("--property", type=str, default="safeFar", help="Vehicle property to train against (default: safeFar)")
         p.add_argument("--alpha", type=float, default=0.3, help="Task loss weight (1-alpha for constraint)")
+        p.add_argument("--normalise-losses", action="store_true",
+                       help="Normalise task and constraint losses by their first-batch values so alpha is scale-independent (experiment 1)")
+        p.add_argument("--phase-switch", type=int, default=0, metavar="EPOCH",
+                       help="Train on task loss only until EPOCH, then switch on constraints (experiment 2). 0 = disabled")
         p.add_argument("--spec-path", type=str, default="pk.vcl", help="Path to Vehicle spec file")
         p.add_argument("-p", "--param", dest="params", action="append", metavar="KEY:VALUE",
                        help="Override a Vehicle parameter (e.g. -p Ka:4.5). Can be repeated.")

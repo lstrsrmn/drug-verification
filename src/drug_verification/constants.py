@@ -7,7 +7,9 @@ DT = 12
 NUM_PATIENTS = 50
 
 # --- Baseline PK/PD parameters ---
-KE = 0.1          # baseline elimination rate (per hour)
+KE = 3.5          # baseline elimination rate (per hour)
+KA = 4.5          # baseline absorption rate (per hour)
+TTD = 12          # time between doses (hours)
 VD = 30           # baseline volume of distribution (L)
 B_TEMP = 0.005    # drug effect on temperature
 C_WBC = 0.02      # drug effect on WBC

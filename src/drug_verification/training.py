@@ -34,8 +34,14 @@ def prepare_data(X, y, test_size=C.DEFAULT_TEST_SIZE, seed=C.DEFAULT_SEED):
         X, y, test_size=test_size, random_state=seed
     )
 
+    import numpy as np
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train_raw)
+    scaler.fit(X_train_raw)
+    # Floor std to avoid near-zero division when features have very low variance
+    # (e.g. trough concentrations ~0 with fast elimination). Without this the
+    # Vehicle spec normalisation overflows to NaN for inputs outside training range.
+    scaler.scale_ = np.maximum(scaler.scale_, 1e-2)
+    X_train = scaler.transform(X_train_raw)
     X_test = scaler.transform(X_test_raw)
 
     return X_train, X_test, y_train, y_test, scaler
@@ -200,6 +206,8 @@ def train_model_with_constraint(
     alpha=0.5,
     epochs=C.DEFAULT_EPOCHS,
     batch_size=C.DEFAULT_BATCH_SIZE,
+    normalise_losses=False,
+    phase_switch=0,
 ):
     """Train with combined task loss + a single Vehicle constraint loss.
 
@@ -215,11 +223,17 @@ def train_model_with_constraint(
         alpha: Weight for task loss; (1-alpha) for constraint loss.
         epochs: Number of training epochs.
         batch_size: Batch size.
+        normalise_losses: If True, divide each loss by its value at the first
+            batch so both start at ~1.0, making alpha meaningful regardless
+            of scale differences.
+        phase_switch: If > 0, train on task loss only for this many epochs,
+            then switch on constraint loss for the remainder. alpha is applied
+            only during the constraint phase.
 
     Returns:
         dict with training history (task_loss, constraint_loss, total_loss per epoch).
     """
-    optimizer = tf.keras.optimizers.Adam()
+    optimizer = tf.keras.optimizers.Adam(clipnorm=1.0)
     dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
     dataset = dataset.shuffle(len(X_train)).batch(batch_size)
 
@@ -228,19 +242,38 @@ def train_model_with_constraint(
 
     history = {"task_loss": [], "constraint_loss": [], "total_loss": [], "val_loss": []}
 
+    task_loss_0 = None
+    constraint_loss_0 = None
+
     for epoch in range(epochs):
         epoch_task, epoch_constraint, epoch_total, n_batches = 0.0, 0.0, 0.0, 0
+        constraint_active = (phase_switch == 0) or (epoch >= phase_switch)
 
         for x_batch, y_batch in dataset:
             with tf.GradientTape() as tape:
                 preds = model(x_batch, training=True)
                 task_loss = tf.reduce_mean(tf.square(preds - y_batch))
 
-                constraint_loss = constraint_fn(network_fn)
+                if constraint_active:
+                    constraint_loss = constraint_fn(network_fn)
 
-                total_loss = alpha * task_loss + (1 - alpha) * constraint_loss
+                    if normalise_losses:
+                        if task_loss_0 is None:
+                            task_loss_0 = float(task_loss.numpy()) or 1.0
+                            constraint_loss_0 = float(constraint_loss.numpy()) or 1.0
+                            print(f"Loss normalisation anchors — task: {task_loss_0:.4f}, constraint: {constraint_loss_0:.4f}")
+                        normed_task = task_loss / task_loss_0
+                        normed_constraint = constraint_loss / constraint_loss_0
+                        total_loss = alpha * normed_task + (1 - alpha) * normed_constraint
+                    else:
+                        total_loss = alpha * task_loss + (1 - alpha) * constraint_loss
+                else:
+                    constraint_loss = tf.constant(0.0)
+                    total_loss = task_loss
 
             grads = tape.gradient(total_loss, model.trainable_variables)
+            grads = [tf.where(tf.math.is_finite(g), g, tf.zeros_like(g))
+                     if g is not None else g for g in grads]
             optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
             epoch_task += task_loss.numpy()
@@ -248,7 +281,6 @@ def train_model_with_constraint(
             epoch_total += total_loss.numpy()
             n_batches += 1
 
-        # Validation loss
         val_preds = model(X_val, training=False)
         val_loss = tf.reduce_mean(tf.square(val_preds - y_val)).numpy()
 
@@ -257,8 +289,9 @@ def train_model_with_constraint(
         history["total_loss"].append(epoch_total / n_batches)
         history["val_loss"].append(val_loss)
 
+        phase_label = "" if constraint_active else " [task only]"
         print(
-            f"Epoch {epoch + 1}/{epochs} — "
+            f"Epoch {epoch + 1}/{epochs}{phase_label} — "
             f"task: {epoch_task / n_batches:.4f}, "
             f"constraint: {epoch_constraint / n_batches:.4f}, "
             f"total: {epoch_total / n_batches:.4f}, "
