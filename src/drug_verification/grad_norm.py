@@ -31,7 +31,7 @@ class GradNorm:
         initial_constraint_weight: float = 1.0,
         initial_constraint2_weight: float = 1.0,
         epsilon: float = 1e-8,
-        min_weight: float = 1e-3,
+        min_weight: float = 0.2,
     ):
         self.n_tasks = 3
         self.alpha = tf.constant(alpha, dtype=tf.float32)

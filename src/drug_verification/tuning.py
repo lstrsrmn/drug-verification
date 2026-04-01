@@ -60,8 +60,8 @@ def run_vehicle_loss_study(args) -> dict[str, object]:
         seed=args.seed,
     )
     X, y = simulate_cohort(cfg, seed=args.seed)
-    X_train, X_val, y_train, y_val, scaler = prepare_data(X, y, seed=args.seed)
-    update_vcl_scaler(scaler, spec_path=args.spec_path)
+    X_train, X_val, y_train, y_val, scaler, y_scaler = prepare_data(X, y, seed=args.seed)
+    update_vcl_scaler(scaler, y_scaler=y_scaler, spec_path=args.spec_path)
 
     parameters = dict(C.DEFAULT_SPEC_PARAMS)
     parameters.update(_parse_param_overrides(args.params))
@@ -123,6 +123,8 @@ def run_vehicle_loss_study(args) -> dict[str, object]:
             y_val=y_val,
             constraint_fn=constraint_fn,
             constraint2_fn=constraint2_fn,
+            y_mean=float(y_scaler.mean_[0]),
+            y_std=float(y_scaler.scale_[0]),
             alpha=gradnorm_alpha,
             gradnorm_lr=gradnorm_weight_lr,
             initial_constraint_weight=initial_constraint_weight,

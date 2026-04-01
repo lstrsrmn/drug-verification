@@ -25,13 +25,15 @@ def build_model(input_size, hidden_sizes=C.DEFAULT_HIDDEN_SIZES):
 def prepare_data(X, y, test_size=C.DEFAULT_TEST_SIZE, seed=C.DEFAULT_SEED):
     """Scale features and split into train/test sets.
 
-    The scaler is fit on the training split only to avoid data leakage.
+    Both X and y are scaled using StandardScaler fit on the training split
+    only to avoid data leakage. Scaling y brings the task loss to ~1.0,
+    matching the scale of Vehicle constraint losses for stable GradNorm training.
 
-    Returns (X_train, X_test, y_train, y_test, scaler).
+    Returns (X_train, X_test, y_train, y_test, scaler, y_scaler).
     """
     y = y.reshape(-1, 1) if y.ndim == 1 else y
 
-    X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+    X_train_raw, X_test_raw, y_train_raw, y_test_raw = train_test_split(
         X, y, test_size=test_size, random_state=seed
     )
 
@@ -39,7 +41,11 @@ def prepare_data(X, y, test_size=C.DEFAULT_TEST_SIZE, seed=C.DEFAULT_SEED):
     X_train = scaler.fit_transform(X_train_raw)
     X_test = scaler.transform(X_test_raw)
 
-    return X_train, X_test, y_train, y_test, scaler
+    y_scaler = StandardScaler()
+    y_train = y_scaler.fit_transform(y_train_raw)
+    y_test = y_scaler.transform(y_test_raw)
+
+    return X_train, X_test, y_train, y_test, scaler, y_scaler
 
 
 def train_model(
@@ -62,12 +68,19 @@ def train_model(
     return history
 
 
-def evaluate_model(model, X_test, y_test):
+def evaluate_model(model, X_test, y_test, y_scaler=None):
     """Evaluate model on the test set.
+
+    If y_scaler is provided, predictions and targets are inverse-transformed
+    before computing metrics so errors are reported in physical units (mg).
 
     Returns a dict with mse, mae, and max_absolute_error.
     """
+    import numpy as np
     preds = model.predict(X_test, verbose=0)
+    if y_scaler is not None:
+        preds = y_scaler.inverse_transform(preds.reshape(-1, 1))
+        y_test = y_scaler.inverse_transform(np.array(y_test).reshape(-1, 1))
     errors = preds - y_test
     mse = float(tf.reduce_mean(tf.square(errors)).numpy())
     mae = float(tf.reduce_mean(tf.abs(errors)).numpy())
@@ -75,7 +88,7 @@ def evaluate_model(model, X_test, y_test):
     return {"mse": mse, "mae": mae, "max_absolute_error": max_ae}
 
 
-def update_vcl_scaler(scaler, spec_path="pk.vcl"):
+def update_vcl_scaler(scaler, y_scaler=None, spec_path="pk.vcl"):
     """Rewrite the normalisation constants in a Vehicle spec file to match a fitted scaler.
 
     The Vehicle spec embeds mean and std values used to normalise inputs before
@@ -122,6 +135,12 @@ def update_vcl_scaler(scaler, spec_path="pk.vcl"):
     print(f"  standardDeviationValues  = [{std_str}]")
     idx2numpy.convert_to_file("pk_mean.idx", scaler.mean_)
     idx2numpy.convert_to_file("pk_std.idx", scaler.scale_)
+
+    if y_scaler is not None:
+        idx2numpy.convert_to_file("pk_y_mean.idx", y_scaler.mean_)
+        idx2numpy.convert_to_file("pk_y_std.idx", y_scaler.scale_)
+        print(f"  y_mean (dose scaler)     = {y_scaler.mean_[0]:.8g}")
+        print(f"  y_std  (dose scaler)     = {y_scaler.scale_[0]:.8g}")
 
 
 def export_onnx(model, out_path="pk.onnx", positive_clamp=True):
@@ -198,6 +217,8 @@ def train_model_with_constraint(
     y_val,
     constraint_fn,
     constraint2_fn,
+    y_mean,
+    y_std,
     alpha=C.DEFAULT_GRADNORM_ALPHA,
     gradnorm_lr=C.DEFAULT_GRADNORM_WEIGHT_LR,
     initial_constraint_weight=C.DEFAULT_INITIAL_CONSTRAINT_WEIGHT,
@@ -225,6 +246,10 @@ def train_model_with_constraint(
         X_val, y_val: Validation data.
         constraint_fn: Compiled safeFar loss callable.
         constraint2_fn: Compiled safeNear loss callable.
+        y_mean: Mean from the y StandardScaler (scalar). Used to de-normalise
+            model output before passing to Vehicle constraint functions, which
+            expect doses in physical units (mg).
+        y_std: Scale from the y StandardScaler (scalar).
         alpha: GradNorm restoring-force exponent (Chen et al., 2018).
         gradnorm_lr: Learning rate for GradNorm's weight optimizer.
         initial_constraint_weight: Initial relative weight for safeFar loss.
@@ -252,8 +277,33 @@ def train_model_with_constraint(
         initial_constraint2_weight=initial_constraint2_weight,
     )
 
+    # De-normalise model output before passing to Vehicle constraint functions.
+    # The model is trained on normalised doses (mean=0, std=1) but the Vehicle
+    # spec formulas expect doses in physical units (mg).
+    _y_mean = float(y_mean)
+    _y_std = float(y_std)
+
     def network_fn(x):
-        return tf.reshape(model(tf.reshape(x, [1, -1]), training=True), [-1])
+        normalised = tf.reshape(model(tf.reshape(x, [1, -1]), training=True), [-1])
+        return normalised * _y_std + _y_mean
+
+    # Verify constraint functions backpropagate through the model before training.
+    # If all gradients are None, the Vehicle compiled function is not connected to
+    # the model graph and constraint training will have no effect.
+    for _fn_name, _fn in [("constraint_fn (safeFar)", constraint_fn), ("constraint2_fn (safeNear)", constraint2_fn)]:
+        with tf.GradientTape() as _tape:
+            _loss = _fn(pk=network_fn)
+        _grads = _tape.gradient(_loss, model.trainable_variables)
+        if all(g is None for g in _grads):
+            import warnings
+            warnings.warn(
+                f"{_fn_name} produces no gradients w.r.t. model variables. "
+                "The Vehicle compiled function may not be connected to the model graph — "
+                "constraint losses will not drive training."
+            )
+        elif verbose:
+            n_none = sum(1 for g in _grads if g is None)
+            print(f"Gradient check {_fn_name}: OK ({len(_grads) - n_none}/{len(_grads)} variables have gradients)")
 
     history = {
         "task_loss": [], "constraint_loss": [], "constraint2_loss": [],

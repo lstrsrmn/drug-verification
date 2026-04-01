@@ -44,14 +44,14 @@ def cmd_train(args):
     X, y = simulate_cohort(cfg, seed=args.seed)
     save_data(X, y)
 
-    X_train, X_test, y_train, y_test, scaler = prepare_data(X, y, seed=args.seed)
+    X_train, X_test, y_train, y_test, scaler, y_scaler = prepare_data(X, y, seed=args.seed)
     print(f"Scaler mean: {scaler.mean_}")
     print(f"Scaler std:  {scaler.scale_}")
 
     # Keep the Vehicle spec in sync with the fitted scaler.
     # The spec hardcodes normalisation constants used during verification — if
     # these differ from what the trained model sees, the proof is unsound.
-    update_vcl_scaler(scaler, spec_path=args.spec_path)
+    update_vcl_scaler(scaler, y_scaler=y_scaler, spec_path=args.spec_path)
 
     model = build_model(X_train.shape[1])
     model.summary()
@@ -76,6 +76,8 @@ def cmd_train(args):
             model, X_train, y_train, X_test, y_test,
             constraint_fn=constraint_fns["safeFar"],
             constraint2_fn=constraint_fns["safeNear"],
+            y_mean=float(y_scaler.mean_[0]),
+            y_std=float(y_scaler.scale_[0]),
             alpha=args.alpha,
             epochs=args.epochs,
             batch_size=args.batch_size,
@@ -87,7 +89,7 @@ def cmd_train(args):
             batch_size=args.batch_size,
         )
 
-    metrics = evaluate_model(model, X_test, y_test)
+    metrics = evaluate_model(model, X_test, y_test, y_scaler=y_scaler)
     print(f"\nTest evaluation:")
     print(f"  MSE:              {metrics['mse']:.4f}")
     print(f"  MAE:              {metrics['mae']:.4f}")
