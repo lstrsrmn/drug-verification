@@ -2,12 +2,13 @@
 
 # --- Simulation parameters ---
 TIMESTEPS = 48
-# DT = 0.5          # hours per timestep
 DT = 12
 NUM_PATIENTS = 50
 
 # --- Baseline PK/PD parameters ---
 KE = 0.1          # baseline elimination rate (per hour)
+KA = 4.5          # baseline absorption rate (per hour)
+TTD = 12          # time between doses (hours)
 VD = 30           # baseline volume of distribution (L)
 B_TEMP = 0.005    # drug effect on temperature
 C_WBC = 0.02      # drug effect on WBC
@@ -33,7 +34,7 @@ WEIGHT_RANGE = (50.0, 100.0)
 
 # --- Covariate adjustment factors ---
 AGE_KE_FACTOR = 0.004       # ke reduction per year above 50
-AGE_KA_FACTOR = 0.004       # ke reduction per year above 50
+AGE_KA_FACTOR = 0.004       # ka reduction per year above 50
 AGE_REFERENCE = 50           # reference age for covariate adjustments
 WEIGHT_REFERENCE = 70.0      # reference weight (kg) for Vd scaling
 SEX_INFECTION_FACTOR = 1.1   # female infection effect multiplier
@@ -69,6 +70,32 @@ DEFAULT_EPOCHS = 100
 DEFAULT_BATCH_SIZE = 32
 DEFAULT_TEST_SIZE = 0.2
 DEFAULT_SEED = 42
+
+# --- Constraint-training defaults (GradNorm) ---
+DEFAULT_GRADNORM_ALPHA = 0.5
+DEFAULT_GRADNORM_WEIGHT_LR = 1e-3
+DEFAULT_INITIAL_CONSTRAINT_WEIGHT = 1.0
+DEFAULT_INITIAL_CONSTRAINT2_WEIGHT = 1.0
+DEFAULT_OPTIMIZER_LR = 1e-3
+
+# --- Optuna tuning defaults ---
+DEFAULT_OPTUNA_N_TRIALS = 25
+DEFAULT_OPTUNA_TIMEOUT_SECONDS = 1800
+DEFAULT_OPTUNA_STORAGE = "sqlite:///optuna_vehicle.db"
+DEFAULT_OPTUNA_STUDY_NAME = "vehicle_loss_hpo"
+DEFAULT_OPTUNA_PRUNER = "median"
+DEFAULT_TUNE_CONSTRAINT_OBJECTIVE_WEIGHT = 0.1
+DEFAULT_TUNE_CONSTRAINT2_OBJECTIVE_WEIGHT = 0.1
+
+TUNE_N_LAYERS_RANGE = (1, 3)
+TUNE_UNITS_RANGE = (32, 256)
+TUNE_BATCH_SIZE_CHOICES = (16, 32, 64)
+TUNE_LEARNING_RATE_RANGE = (1e-4, 3e-3)
+TUNE_GRADNORM_ALPHA_RANGE = (0.1, 1.5)
+TUNE_GRADNORM_WEIGHT_LR_RANGE = (1e-4, 1e-2)
+TUNE_INITIAL_CONSTRAINT_WEIGHT_RANGE = (0.25, 1.75)
+
+# --- Verification/spec defaults ---
 DEFAULT_SPEC_PARAMS = {
     "Ka": 4.5,
     "Ke": 3.5,

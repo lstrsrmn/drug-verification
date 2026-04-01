@@ -57,8 +57,6 @@ def cmd_train(args):
     model.summary()
 
     if args.vehicle_loss:
-        import tensorflow as tf
-
         # Build parameters from defaults, overridden by any CLI --param flags
         parameters = dict(C.DEFAULT_SPEC_PARAMS)
         if args.params:
@@ -74,13 +72,10 @@ def cmd_train(args):
         )
         print(f"Training with Vehicle properties: {list(constraint_fns.keys())}")
 
-        def combined_constraint_fn(network_fn):
-            return tf.add_n([fn(network_fn) for fn in constraint_fns.values()])
-
         history = train_model_with_constraint(
             model, X_train, y_train, X_test, y_test,
-            combined_constraint_fn,
-            parameters,
+            constraint_fn=constraint_fns["safeFar"],
+            constraint2_fn=constraint_fns["safeNear"],
             alpha=args.alpha,
             epochs=args.epochs,
             batch_size=args.batch_size,
@@ -146,6 +141,20 @@ def cmd_test(args):
             print(f"✗ Validation failed: {e}")
 
 
+def cmd_tune(args):
+    """Run Optuna hyperparameter tuning for constrained training."""
+    from drug_verification.tuning import run_vehicle_loss_study
+
+    result = run_vehicle_loss_study(args)
+    summary = result["summary"]
+    print("\nTuning complete.")
+    print(f"  Study:        {summary['study_name']}")
+    print(f"  Best trial:   {summary['best_trial_number']}")
+    print(f"  Best value:   {summary['best_value']:.6f}")
+    print(f"  Params saved: {result['best_params_path']}")
+    print(f"  Trials CSV:   {result['trials_csv_path']}")
+
+
 def cmd_all(args):
     """Run the full pipeline: simulate → train → export → plot."""
     # Simulate
@@ -188,7 +197,7 @@ def build_parser():
         p.add_argument("--save-model", type=str, default=None, help="Path to save Keras model")
         p.add_argument("--vehicle-loss", action="store_true", help="Enable Vehicle spec constraint loss")
         p.add_argument("--property", type=str, default="safeFar", help="Vehicle property to train against (default: safeFar)")
-        p.add_argument("--alpha", type=float, default=0.3, help="Task loss weight (1-alpha for constraint)")
+        p.add_argument("--alpha", type=float, default=C.DEFAULT_GRADNORM_ALPHA, help="GradNorm restoring-force exponent")
         p.add_argument("--spec-path", type=str, default="pk.vcl", help="Path to Vehicle spec file")
         p.add_argument("-p", "--param", dest="params", action="append", metavar="KEY:VALUE",
                        help="Override a Vehicle parameter (e.g. -p Ka:4.5). Can be repeated.")
@@ -230,6 +239,21 @@ def build_parser():
     p_test.add_argument("--output-path", default="pk.onnx", help="Path where ONNX model will be saved (default: pk.onnx)")
     p_test.add_argument("--validate", action="store_true", help="Validate generated model with onnxruntime")
 
+    # tune
+    p_tune = sub.add_parser("tune", help="Run Optuna tuning for Vehicle-loss constrained training")
+    add_common(p_tune)
+    p_tune.add_argument("--epochs", type=int, default=C.DEFAULT_EPOCHS)
+    p_tune.add_argument("--spec-path", type=str, default="pk.vcl")
+    p_tune.add_argument("-p", "--param", dest="params", action="append", metavar="KEY:VALUE")
+    p_tune.add_argument("--n-trials", type=int, default=C.DEFAULT_OPTUNA_N_TRIALS)
+    p_tune.add_argument("--timeout", type=int, default=C.DEFAULT_OPTUNA_TIMEOUT_SECONDS)
+    p_tune.add_argument("--storage", type=str, default=C.DEFAULT_OPTUNA_STORAGE)
+    p_tune.add_argument("--study-name", type=str, default=C.DEFAULT_OPTUNA_STUDY_NAME)
+    p_tune.add_argument("--pruner", choices=["median", "hyperband", "none"], default=C.DEFAULT_OPTUNA_PRUNER)
+    p_tune.add_argument("--objective-constraint-weight", type=float, default=C.DEFAULT_TUNE_CONSTRAINT_OBJECTIVE_WEIGHT)
+    p_tune.add_argument("--best-params-out", type=str, default="optuna_best_params.json")
+    p_tune.add_argument("--trials-csv-out", type=str, default="optuna_trials.csv")
+
     return parser
 
 
@@ -244,6 +268,7 @@ def main(argv=None):
         "export": cmd_export,
         "test": cmd_test,
         "all": cmd_all,
+        "tune": cmd_tune,
     }
     commands[args.command](args)
 

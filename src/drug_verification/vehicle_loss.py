@@ -59,21 +59,30 @@ def generate_training_spec(
     std_dev,
     parameters: dict,
 ) -> str:
-    """Return a minimal .vcl spec string for safeFar loss compilation.
+    """Return a .vcl spec string for training loss compilation.
 
-    Inlines scaler values and PK parameters as literals so the Vehicle loss
-    compiler can resolve them. Uses tight per-element physiological input
-    bounds matching safeFarInput in pk.vcl (supported since Vehicle #1086).
-    The if/else branch on Ka vs Ke is resolved at generation time.
+    Inlines all scaler values and PK parameters as literals so the Vehicle
+    loss compiler can resolve them — @dataset and @parameter free variables
+    cannot be compiled. Generates both safeFar and safeNear properties.
+
+    safeFarOutput targets C_safe * 0.95 (stricter than the verified property)
+    to give Marabou a margin at verification time, preventing floating-point
+    boundary counterexamples.
+
+    Input bounds are per-element (Vehicle 0.24.1+, fix #1086):
+      conc:   0 – C_safe*0.99 (safeFar domain)
+      temp:   34 – 43°C (severe hypothermia to maximum survivable)
+      wbc:    0 – 100 (full possible range)
+      age:    0 – 100 (full possible range)
+      weight: 0 – 100 (full possible range)
 
     Args:
-        mean: Scaler mean array (length 5).
-        std_dev: Scaler std array (length 5).
-        parameters: Dict containing Ka, Ke, Vd, C_safe, Ke_over, Ka_under,
-                    Ka_over, Ke_under (matching DEFAULT_SPEC_PARAMS keys).
+        mean: Fitted StandardScaler mean array (length 5).
+        std_dev: Fitted StandardScaler scale array (length 5).
+        parameters: Dict matching DEFAULT_SPEC_PARAMS keys.
 
     Returns:
-        String containing a minimal .vcl spec declaring only safeFar.
+        String containing a complete .vcl spec with safeFar and safeNear.
     """
     Ka = parameters["Ka"]
     Ke = parameters["Ke"]
@@ -81,6 +90,7 @@ def generate_training_spec(
     C_safe = parameters["C_safe"]
     Ke_over = parameters["Ke_over"]
     Ka_under = parameters["Ka_under"]
+    eps = parameters["eps"]
 
     mean_str = ", ".join(f"{v:.8g}" for v in mean)
     std_str  = ", ".join(f"{v:.8g}" for v in std_dev)
@@ -94,9 +104,13 @@ def generate_training_spec(
         Ke_under = parameters["Ke_under"]
         peak_factor = f"{Ke_under:.8g} - {Ka_over:.8g}"
 
+    training_ceiling = C_safe * 0.95
+
     return f"""\
--- Auto-generated training spec for safeFar — do not edit by hand.
--- Generated from pk.vcl with concrete parameter and scaler values inlined.
+-- Auto-generated training spec — do not edit by hand.
+-- Generated from pk.vcl with all @parameter and @dataset values inlined.
+-- Uses per-element input bounds (Vehicle 0.24.1+, fix #1086).
+-- safeFarOutput targets C_safe * 0.95 to provide Marabou margin.
 
 type InputVector = Tensor Real [5]
 type OutputVector = Tensor Real [1]
@@ -125,19 +139,31 @@ normpk x = pk (normalise x)
 safeFarInput : InputVector -> Bool
 safeFarInput x =
     0 <= x ! conc <= {C_safe * 0.99:.8g} and
-    36.5 <= x ! temp <= 40 and
-    7.5 <= x ! wbc <= 20 and
-    18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100
+    34 <= x ! temp <= 43 and
+    0 <= x ! wbc <= 100 and
+    0 <= x ! age <= 100 and
+    0 <= x ! weight <= 100
 
 safeFarOutput : InputVector -> Bool
 safeFarOutput x =
     let d = (((normpk x) ! 0) * {Ka:.8g}) / ({Vd:.8g} * ({Ka:.8g} - {Ke:.8g})) in
-    (x ! conc) + d * ({peak_factor}) < {C_safe * 0.95:.8g}
+    (x ! conc) + d * ({peak_factor}) < {training_ceiling:.8g}
 
 @property
 safeFar : Bool
 safeFar = forall x . safeFarInput x => safeFarOutput x
+
+safeNearInput : InputVector -> Bool
+safeNearInput x =
+    {C_safe * 0.99:.8g} <= x ! conc <= {C_safe:.8g} and
+    34 <= x ! temp <= 43 and
+    0 <= x ! wbc <= 100 and
+    0 <= x ! age <= 100 and
+    0 <= x ! weight <= 100
+
+@property
+safeNear : Bool
+safeNear = forall x . safeNearInput x => normpk x ! 0 < {eps:.8g}
 """
 
 
@@ -151,73 +177,41 @@ def load_drug_verification_constraints(
 ):
     """Load Vehicle specification properties as differentiable loss functions.
 
-    Uses two loading strategies depending on the property:
-
-      safeFar: Compiled from a generated temporary spec with inlined values.
-               The if/else branch on Ka/Ke in pk.vcl causes the loss compiler
-               to collapse to a constant when loaded directly; inlining
-               resolves it at generation time.
-
-      safeNear: Loaded directly from pk.vcl. Vehicle 0.24.1 resolves
-               @parameter declarations correctly and handles negation through
-               forall. The compiled function's extra arguments (scaler arrays,
-               C_safe, eps) are bound via closure so the returned callable
-               only requires the network.
+    Both safeFar and safeNear are compiled from a single generated training
+    spec with all @parameter and @dataset values inlined. Loading from pk.vcl
+    directly is not used for training because @dataset free variables cannot
+    be resolved by the loss compiler.
 
     Args:
-        spec_path: Path to the main pk.vcl file (used for safeNear).
-        properties: Iterable of property names to load. Defaults to both.
-        logic: Differentiable logic to use (default: Vehicle).
-        mean: Scaler mean array. Required.
-        std_dev: Scaler std array. Required.
-        parameters: Dict of parameter values (Ka, Ke, Vd, C_safe, eps, …).
+        spec_path: Unused for training (kept for API compatibility).
+        properties: Property names to load. Defaults to ["safeFar", "safeNear"].
+        logic: Differentiable logic (default: Vehicle).
+        mean: Fitted scaler mean array. Required for training.
+        std_dev: Fitted scaler scale array. Required for training.
+        parameters: Dict matching DEFAULT_SPEC_PARAMS. Required for training.
 
     Returns:
-        Dict mapping property name -> callable ``fn(network) -> scalar tensor``.
+        Dict mapping property name -> callable ``fn(pk=network_fn) -> tensor``.
     """
-    import tensorflow as tf
-    import numpy as np
-
     if logic is None:
         logic = vcl.DifferentiableLogic.Vehicle
 
     props = list(properties) if properties else ["safeFar", "safeNear"]
-    result = {}
 
-    if "safeFar" in props:
-        spec_content = generate_training_spec(mean, std_dev, parameters)
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".vcl", delete=False, dir="."
-        )
-        try:
-            tmp.write(spec_content)
-            tmp.flush()
-            tmp.close()
-            decls = loss_tf.load_specification(
-                tmp.name,
-                logic=logic,
-                declarations=["safeFar"],
-            )
-        finally:
-            os.unlink(tmp.name)
-        result["safeFar"] = decls["safeFar"]  # fn(pk) -> loss
-
-    if "safeNear" in props:
+    spec_content = generate_training_spec(mean, std_dev, parameters)
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".vcl", delete=False, dir="."
+    )
+    try:
+        tmp.write(spec_content)
+        tmp.flush()
+        tmp.close()
         decls = loss_tf.load_specification(
-            spec_path,
+            tmp.name,
             logic=logic,
-            declarations=["safeNear"],
+            declarations=props,
         )
-        safe_near_raw = decls["safeNear"]
-        # Bind the extra arguments so the returned callable matches fn(network) -> loss
-        mean_t = tf.constant(np.array(mean), dtype=tf.float32)
-        std_t  = tf.constant(np.array(std_dev), dtype=tf.float32)
-        C_safe = float(parameters["C_safe"])
-        eps    = float(parameters["eps"])
+    finally:
+        os.unlink(tmp.name)
 
-        def _safe_near(network_fn, _mean=mean_t, _std=std_t, _C=C_safe, _eps=eps):
-            return safe_near_raw(_mean, _std, network_fn, _C, _eps)
-
-        result["safeNear"] = _safe_near
-
-    return result
+    return {name: decls[name] for name in props if name in decls}
