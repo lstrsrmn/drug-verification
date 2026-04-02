@@ -37,8 +37,14 @@ def prepare_data(X, y, test_size=C.DEFAULT_TEST_SIZE, seed=C.DEFAULT_SEED):
         X, y, test_size=test_size, random_state=seed
     )
 
+    import numpy as np
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train_raw)
+    scaler.fit(X_train_raw)
+    # Floor std to avoid near-zero division when features have very low variance
+    # (e.g. trough concentrations ~0 with fast elimination). Without this the
+    # Vehicle spec normalisation overflows to NaN for inputs outside training range.
+    scaler.scale_ = np.maximum(scaler.scale_, 1e-2)
+    X_train = scaler.transform(X_train_raw)
     X_test = scaler.transform(X_test_raw)
 
     y_scaler = StandardScaler()
@@ -130,20 +136,23 @@ def update_vcl_scaler(scaler, y_scaler=None, spec_path="pk.vcl"):
     # with open(spec_path, "w") as f:
     #     f.write(content)
 
+    import os
+    os.makedirs("data", exist_ok=True)
+
     print(f"Updated {spec_path} with scaler values from this training run.")
     print(f"  meanScalingValues        = [{mean_str}]")
     print(f"  standardDeviationValues  = [{std_str}]")
-    idx2numpy.convert_to_file("pk_mean.idx", scaler.mean_)
-    idx2numpy.convert_to_file("pk_std.idx", scaler.scale_)
+    idx2numpy.convert_to_file("data/pk_mean.idx", scaler.mean_)
+    idx2numpy.convert_to_file("data/pk_std.idx", scaler.scale_)
 
     if y_scaler is not None:
-        idx2numpy.convert_to_file("pk_y_mean.idx", y_scaler.mean_)
-        idx2numpy.convert_to_file("pk_y_std.idx", y_scaler.scale_)
+        idx2numpy.convert_to_file("data/pk_y_mean.idx", y_scaler.mean_)
+        idx2numpy.convert_to_file("data/pk_y_std.idx", y_scaler.scale_)
         print(f"  y_mean (dose scaler)     = {y_scaler.mean_[0]:.8g}")
         print(f"  y_std  (dose scaler)     = {y_scaler.scale_[0]:.8g}")
 
 
-def export_onnx(model, out_path="pk.onnx", positive_clamp=True):
+def export_onnx(model, out_path="models/pk.onnx", positive_clamp=True):
     """Export a Keras model to ONNX format.
 
     If positive_clamp is True (default), appends a constant Add node to the
@@ -229,6 +238,7 @@ def train_model_with_constraint(
     trial=None,
     epochs=C.DEFAULT_EPOCHS,
     batch_size=C.DEFAULT_BATCH_SIZE,
+    phase_switch=0,
     verbose=True,
 ):
     """Train with task loss + safeFar + safeNear constraint losses balanced by GradNorm.
@@ -260,6 +270,8 @@ def train_model_with_constraint(
         trial: Optional Optuna trial for pruning support.
         epochs: Number of training epochs.
         batch_size: Batch size.
+        phase_switch: If > 0, train on task loss only for this many epochs then
+            switch on GradNorm constraint balancing. 0 = constraints active from epoch 1.
         verbose: Whether to print per-epoch logs.
 
     Returns:
@@ -275,6 +287,7 @@ def train_model_with_constraint(
         weight_lr=gradnorm_lr,
         initial_constraint_weight=initial_constraint_weight,
         initial_constraint2_weight=initial_constraint2_weight,
+        min_weight=C.DEFAULT_GRADNORM_MIN_WEIGHT,
     )
 
     # De-normalise model output before passing to Vehicle constraint functions.
@@ -317,26 +330,52 @@ def train_model_with_constraint(
         epoch_total = epoch_grad_norm = 0.0
         epoch_task_w = epoch_con_w = epoch_con2_w = 0.0
         n_batches = 0
+        constraint_active = (phase_switch == 0) or (epoch >= phase_switch)
+
+        # Reset optimizer at the phase boundary so Adam's second moment estimates
+        # from task-only training don't inflate effective step sizes when the much
+        # larger constraint gradients first appear.
+        if phase_switch > 0 and epoch == phase_switch:
+            optimizer = tf.keras.optimizers.Adam(
+                learning_rate=optimizer_lr, clipnorm=1.0
+            )
+            if verbose:
+                print(f"Epoch {epoch + 1}: resetting optimizer for constraint phase.")
 
         for x_batch, y_batch in dataset:
             with tf.GradientTape(persistent=True) as tape:
                 preds = model(x_batch, training=True)
                 task_loss = tf.reduce_mean(tf.square(preds - y_batch))
-                constraint_loss = tf.cast(
-                    tf.reduce_mean(constraint_fn(pk=network_fn)), tf.float32
-                )
-                constraint2_loss = tf.cast(
-                    tf.reduce_mean(constraint2_fn(pk=network_fn)), tf.float32
-                )
+                if constraint_active:
+                    constraint_loss = tf.cast(
+                        tf.reduce_mean(constraint_fn(pk=network_fn)), tf.float32
+                    )
+                    constraint2_loss = tf.cast(
+                        tf.reduce_mean(constraint2_fn(pk=network_fn)), tf.float32
+                    )
+                else:
+                    constraint_loss = tf.constant(0.0)
+                    constraint2_loss = tf.constant(0.0)
 
-            batch_info = grad_norm.balance(
-                task_loss=task_loss,
-                constraint_loss=constraint_loss,
-                constraint2_loss=constraint2_loss,
-                tape=tape,
-                model_optimizer=optimizer,
-                model_variables=model.trainable_variables,
-            )
+            if constraint_active:
+                batch_info = grad_norm.balance(
+                    task_loss=task_loss,
+                    constraint_loss=constraint_loss,
+                    constraint2_loss=constraint2_loss,
+                    tape=tape,
+                    model_optimizer=optimizer,
+                    model_variables=model.trainable_variables,
+                )
+            else:
+                grads = tape.gradient(task_loss, model.trainable_variables)
+                optimizer.apply_gradients(zip(grads, model.trainable_variables))
+                batch_info = {
+                    "total_loss": task_loss,
+                    "grad_norm_loss": tf.constant(0.0),
+                    "task_weight": tf.constant(1.0),
+                    "constraint_weight": tf.constant(0.0),
+                    "constraint2_weight": tf.constant(0.0),
+                }
             del tape
 
             epoch_task += float(task_loss.numpy())
@@ -376,8 +415,9 @@ def train_model_with_constraint(
                 raise optuna.TrialPruned()
 
         if verbose:
+            phase_label = "" if constraint_active else " [task only]"
             print(
-                f"Epoch {epoch + 1}/{epochs} — "
+                f"Epoch {epoch + 1}/{epochs}{phase_label} — "
                 f"task: {epoch_task / n_batches:.4f}, "
                 f"safeFar: {epoch_constraint / n_batches:.4f}, "
                 f"safeNear: {epoch_constraint2 / n_batches:.4f}, "

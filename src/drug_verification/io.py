@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 
 
-def save_data(X, y, x_path="patient_states.csv", y_path="dose_targets.csv"):
+def save_data(X, y, x_path="data/patient_states.csv", y_path="data/dose_targets.csv"):
     """Save simulation state/action arrays to CSV files."""
+    os.makedirs(os.path.dirname(x_path), exist_ok=True)
     df_X = pd.DataFrame(X, columns=["C", "T", "WBC", "Age", "Weight"])
     df_y = pd.DataFrame(y, columns=["Dose"])
     df_X.to_csv(x_path, index=False)
@@ -15,7 +16,7 @@ def save_data(X, y, x_path="patient_states.csv", y_path="dose_targets.csv"):
     print(f"Saved {x_path} ({len(df_X)} rows) and {y_path}")
 
 
-def load_data(x_path="patient_states.csv", y_path="dose_targets.csv"):
+def load_data(x_path="data/patient_states.csv", y_path="data/dose_targets.csv"):
     """Load simulation data from CSV files."""
     df_X = pd.read_csv(x_path)
     df_y = pd.read_csv(y_path)

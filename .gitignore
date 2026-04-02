@@ -9,6 +9,19 @@ Rocq/*
 .*
 !*.sh
 
+# Generated training artefacts
+*.keras
+*.onnx
+data/*.csv
+data/*.idx
+venv_clinical/
+
+# LaTeX build artefacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

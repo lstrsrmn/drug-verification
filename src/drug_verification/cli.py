@@ -81,6 +81,7 @@ def cmd_train(args):
             alpha=args.alpha,
             epochs=args.epochs,
             batch_size=args.batch_size,
+            phase_switch=args.phase_switch,
         )
     else:
         history = train_model(
@@ -171,7 +172,7 @@ def cmd_all(args):
 
     # Export
     args.model_path = args.save_model
-    args.onnx_out = args.onnx_out if hasattr(args, "onnx_out") else "pk.onnx"
+    args.onnx_out = args.onnx_out if hasattr(args, "onnx_out") else "models/pk.onnx"
     cmd_export(args)
 
     # Plot
@@ -200,6 +201,8 @@ def build_parser():
         p.add_argument("--vehicle-loss", action="store_true", help="Enable Vehicle spec constraint loss")
         p.add_argument("--property", type=str, default="safeFar", help="Vehicle property to train against (default: safeFar)")
         p.add_argument("--alpha", type=float, default=C.DEFAULT_GRADNORM_ALPHA, help="GradNorm restoring-force exponent")
+        p.add_argument("--phase-switch", type=int, default=0, metavar="EPOCH",
+                       help="Train on task loss only until EPOCH, then switch on GradNorm constraints. 0 = constraints active from epoch 1.")
         p.add_argument("--spec-path", type=str, default="pk.vcl", help="Path to Vehicle spec file")
         p.add_argument("-p", "--param", dest="params", action="append", metavar="KEY:VALUE",
                        help="Override a Vehicle parameter (e.g. -p Ka:4.5). Can be repeated.")
@@ -225,7 +228,7 @@ def build_parser():
     # export
     p_export = sub.add_parser("export", help="Export Keras model to ONNX")
     p_export.add_argument("--model-path", required=True, help="Path to saved Keras model")
-    p_export.add_argument("--onnx-out", default="pk.onnx")
+    p_export.add_argument("--onnx-out", default="models/pk.onnx")
 
     # all
     p_all = sub.add_parser("all", help="Full pipeline: simulate → train → export → plot")
@@ -233,7 +236,7 @@ def build_parser():
     add_train_args(p_all)
     p_all.add_argument("--output-dir", default="nn_plots")
     p_all.add_argument("--no-show", action="store_true")
-    p_all.add_argument("--onnx-out", default="pk.onnx")
+    p_all.add_argument("--onnx-out", default="models/pk.onnx")
 
     # test
     p_test = sub.add_parser("test", help="Build zero-weight ONNX model for formal verification")
