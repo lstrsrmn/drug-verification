@@ -1,5 +1,7 @@
 """Neural network training, evaluation, and export."""
 
+import os
+
 import tensorflow as tf
 from tensorflow.keras import models, layers
 from sklearn.model_selection import train_test_split
@@ -125,8 +127,9 @@ def update_vcl_scaler(scaler, spec_path="pk.vcl"):
     print(f"Updated {spec_path} with scaler values from this training run.")
     print(f"  meanScalingValues        = [{mean_str}]")
     print(f"  standardDeviationValues  = [{std_str}]")
-    idx2numpy.convert_to_file("pk_mean.idx", scaler.mean_)
-    idx2numpy.convert_to_file("pk_std.idx", scaler.scale_)
+    os.makedirs("data", exist_ok=True)
+    idx2numpy.convert_to_file("data/pk_mean.idx", scaler.mean_)
+    idx2numpy.convert_to_file("data/pk_std.idx", scaler.scale_)
 
 
 def export_onnx(model, out_path="pk.onnx", positive_clamp=True):

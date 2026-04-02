@@ -6,8 +6,22 @@ Rocq/*
 !Rocq/*.v
 !Rocq/_CoqProject
 *.tex
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
 .*
 !*.sh
+
+# Generated training outputs (recreate with `pk simulate` / `pk train`)
+data/patient_states.csv
+data/dose_targets.csv
+data/pk_mean.idx
+data/pk_std.idx
+
+# Trained models (use models/ for anything worth keeping)
+*.keras
+*.onnx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -165,6 +179,7 @@ activemq-data/
 env/
 venv/
 venv313/
+venv_clinical/
 ENV/
 env.bak/
 venv.bak/

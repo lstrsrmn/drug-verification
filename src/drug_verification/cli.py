@@ -151,8 +151,8 @@ def cmd_test(args):
 def cmd_all(args):
     """Run the full pipeline: simulate → train → export → plot."""
     # Simulate
-    args.x_out = "patient_states.csv"
-    args.y_out = "dose_targets.csv"
+    args.x_out = "data/patient_states.csv"
+    args.y_out = "data/dose_targets.csv"
     cmd_simulate(args)
 
     # Train — always enable Vehicle constraint loss in the full pipeline
@@ -166,8 +166,8 @@ def cmd_all(args):
     cmd_export(args)
 
     # Plot
-    args.x_in = "patient_states.csv"
-    args.y_in = "dose_targets.csv"
+    args.x_in = "data/patient_states.csv"
+    args.y_in = "data/dose_targets.csv"
     cmd_plot(args)
 
 
@@ -202,8 +202,8 @@ def build_parser():
     # simulate
     p_sim = sub.add_parser("simulate", help="Run PK/PD simulation and save CSVs")
     add_common(p_sim)
-    p_sim.add_argument("--x-out", default="patient_states.csv")
-    p_sim.add_argument("--y-out", default="dose_targets.csv")
+    p_sim.add_argument("--x-out", default="data/patient_states.csv")
+    p_sim.add_argument("--y-out", default="data/dose_targets.csv")
 
     # train
     p_train = sub.add_parser("train", help="Simulate + train neural network")
@@ -212,8 +212,8 @@ def build_parser():
 
     # plot
     p_plot = sub.add_parser("plot", help="Generate plots from saved data")
-    p_plot.add_argument("--x-in", default="patient_states.csv")
-    p_plot.add_argument("--y-in", default="dose_targets.csv")
+    p_plot.add_argument("--x-in", default="data/patient_states.csv")
+    p_plot.add_argument("--y-in", default="data/dose_targets.csv")
     p_plot.add_argument("--output-dir", default="nn_plots", help="Directory to save plots")
     p_plot.add_argument("--no-show", action="store_true", help="Save plots without displaying")
 
