@@ -1,6 +1,71 @@
 PDT-Training — GradNorm Automated Constraint Balancing
 =======
 
+COMPARISON: trial/pdt-training (this branch) vs trial/manual-pdt-training
+------------------------------------------------------------------------
+
+Both branches share the same goal — train a formally verified PK dosing network —
+and both verified all properties. The core difference is how the three losses
+(task, safeFar, safeNear) are balanced during phase 2.
+
+Approach
+  manual-pdt-training:  fixed alpha — `--alpha 0.3` splits weight 30% task /
+                        70% constraint, fixed for all of phase 2.
+  pdt-training (this):  GradNorm — weights adapt each batch based on per-loss
+                        gradient norms and training-rate ratios.
+
+Loss scale mismatch problem
+  manual-pdt-training:  not addressed. Task MSE was on raw doses (~25,000 mg²)
+                        vs constraint losses (~1.0), but fixed alpha masked this
+                        by heavily weighting constraints.
+  pdt-training (this):  fixed by (a) y-normalisation — model trains in
+                        normalised dose space, scaler inverse-transforms for
+                        evaluation and constraint functions; and (b) normalising
+                        per-loss gradients by initial values inside GradNorm so
+                        all three losses start at ~1.0.
+
+Gradient instability at phase_switch
+  manual-pdt-training:  not addressed. Constraint gradient magnitude ~14,000 at
+                        epoch 21 caused a single large weight update that landed
+                        in a safe region. Worked, but relied on that one-step
+                        jump.
+  pdt-training (this):  Adam optimiser reset with `clipnorm=1.0` at phase_switch
+                        prevents the Adam second-moment estimates from the
+                        task-only phase from producing outsized steps when
+                        constraint gradients arrive.
+
+Tape gradient path
+  manual-pdt-training:  not an issue (single total_loss, standard tape).
+  pdt-training (this):  `tape.gradient(total_loss, ...)` returned zeros because
+                        the weighted sum was assembled outside the tape context.
+                        Fixed by computing per-loss gradients individually and
+                        combining manually with GradNorm weights.
+
+Shared fixes (ported from manual-pdt-training into this branch)
+  - Scaler std floor (scale_ >= 1e-2) to prevent NaN in Vehicle normalisation
+  - Output layer linear in Keras; ReLU + Add(0.0001) appended at ONNX export
+  - Two-phase training via --phase-switch flag
+  - safeFar generated spec with inlined PK parameters (Vehicle branch collapse bug)
+
+Results comparison
+
+  | Metric                  | manual-pdt-training | pdt-training (this) |
+  |-------------------------|---------------------|---------------------|
+  | Test MAE                | 7.4 mg              | 4.8 mg              |
+  | Max absolute error      | 260 mg              | 146 mg              |
+  | Corr(true, pred)        | 0.989               | 0.996               |
+  | Pred std / True std     | ~1.00               | 1.030               |
+  | High-temp dose ratio    | ~3.5x               | 4.45x               |
+  | safeFar verified        | yes                 | yes                 |
+  | safeNear verified       | yes                 | yes                 |
+  | nonNeg verified         | yes                 | yes                 |
+
+GradNorm improved accuracy (MAE -35%, max error -44%) while preserving
+verification. Both worst-case error patterns are the same: underdosing at
+timestep 0–1 for high-severity patients with zero initial concentration.
+
+=======
+
 CHANGE: Property-driven training with GradNorm adaptive loss balancing
 Branch: trial/pdt-training
 Files changed: src/drug_verification/grad_norm.py (new),
@@ -198,26 +263,55 @@ The verified run used `--phase-switch 20` with 100 total epochs.
 
 ------------------------------------------------------------------------
 
-RESULT: Formal verification — pending
+RESULT: Formal verification — PASSED
 Tool: Vehicle 0.24.1 + Marabou
 
-Training is in progress. Once complete, verify with:
-
-```bash
-./verify.sh models/pk.onnx
+```
+Verifying properties:
+  Ka_pos    [..] 0/0 queries  result: 🗸 - (trivial)
+  Ke_pos    [..] 0/0 queries  result: 🗸 - (trivial)
+  Ke_n_Ka   [..] 0/0 queries  result: 🗸 - (trivial)
+  Vd_pos    [..] 0/0 queries  result: 🗸 - (trivial)
+  C_safe_pos[..] 0/0 queries  result: 🗸 - (trivial)
+  ttd_pos   [..] 0/0 queries  result: 🗸 - (trivial)
+  safeFar   [==] 1/1 queries  result: 🗸 - Marabou proved no counterexample exists
+  safeNear  [==] 1/1 queries  result: 🗸 - Marabou proved no counterexample exists
+  nonNeg    [==] 1/1 queries  result: 🗸 - Marabou proved no counterexample exists
 ```
 
-Accuracy at time of verification: (see training log)
+All 9 properties verified. The 6 trivial properties are structural bounds on
+the PK parameters (Ka, Ke, Vd, C_safe, ttd all positive; Ke < Ka). The three
+non-trivial properties required Marabou to search for counterexamples and found
+none.
 
 ------------------------------------------------------------------------
 
-Clinical Relevance:
-`drug-verification/clinical_relevance.ipynb`
+RESULT: Clinical relevance — PASSED
+File: clinical_relevance.ipynb
 
-Same analysis as trial/manual-pdt-training. The concern is that a model could pass
-verification by being pathologically conservative — always predicting near-zero doses
-regardless of how sick the patient is.
+The concern is that a model could pass verification by being pathologically
+conservative — predicting near-zero doses regardless of patient state. The
+notebook confirms this is not the case.
 
-See clinical_relevance.ipynb for full results once training completes.
+Summary (50 patients, 2350 samples):
+
+  MAE                        4.8 mg
+  95th percentile error     19.5 mg
+  99th percentile error     37.3 mg
+  Max absolute error       146.0 mg   (underdose at timestep 0, high-severity patient)
+  Mean bias                 +0.9 mg   (slight overdosing on average)
+  Within 50 mg             99.6%
+  Within 100 mg            99.9%
+
+  Pred std / True std       1.030     (1.0 = perfectly responsive)
+  Corr(true, pred)          0.996
+
+  Low temp dose:   58.3 mg
+  High temp dose: 259.5 mg            (4.45x ratio — model responds to severity)
+
+Model is clinically responsive (r = 0.996) and prediction variance matches true
+dose variance — not a flat conservative predictor. Worst-case errors are
+underdoses at early timesteps for high-severity patients (high fever + WBC),
+which is suboptimal but not a safety violation.
 
 ------------------------------------------------------------------------
