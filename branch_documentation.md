@@ -25,14 +25,18 @@ Loss scale mismatch problem
                         all three losses start at ~1.0.
 
 Gradient instability at phase_switch
-  manual-pdt-training:  not addressed. Constraint gradient magnitude ~14,000 at
-                        epoch 21 caused a single large weight update that landed
-                        in a safe region. Worked, but relied on that one-step
-                        jump.
-  pdt-training (this):  Adam optimiser reset with `clipnorm=1.0` at phase_switch
-                        prevents the Adam second-moment estimates from the
-                        task-only phase from producing outsized steps when
-                        constraint gradients arrive.
+  manual-pdt-training:  partially addressed — `clipnorm=1.0` is applied to the
+                        Adam optimiser throughout all training (both phases).
+                        This capped individual gradient steps but did not reset
+                        Adam's accumulated second-moment estimates. The constraint
+                        gradient at epoch 21 (~14,000) still produced a single
+                        large update that landed in a safe region, so verification
+                        passed but relied on that one-step jump.
+  pdt-training (this):  Adam optimiser is reset with a fresh instance
+                        (`clipnorm=1.0`) at `phase_switch`. This clears the
+                        accumulated second-moment estimates from phase 1, so
+                        Adam's effective step size starts from a neutral baseline
+                        when the much larger constraint gradients first arrive.
 
 Tape gradient path
   manual-pdt-training:  not an issue (single total_loss, standard tape).
@@ -73,7 +77,9 @@ Files changed: src/drug_verification/grad_norm.py (new),
                src/drug_verification/training.py,
                src/drug_verification/vehicle_loss.py,
                src/drug_verification/cli.py,
-               src/drug_verification/constants.py
+               src/drug_verification/constants.py,
+               src/drug_verification/types.py,
+               src/drug_verification/io.py
 
 Background
 
@@ -245,6 +251,39 @@ File: src/drug_verification/grad_norm.py, src/drug_verification/constants.py
 With the previous 0.2 floor, GradNorm hit the minimum weight for safeNear after only a
 few epochs and stopped rebalancing. The model gradients were then dominated by whatever
 remained at the floor. Lowered to 0.05 to give GradNorm more room to balance freely.
+
+------------------------------------------------------------------------
+
+CHANGE: Simulation PK parameters updated (ke, ka) and io mkdir fix
+Files: src/drug_verification/types.py, src/drug_verification/io.py
+
+SimulationConfig defaults were changed relative to trial/manual-pdt-training:
+
+  | Parameter | manual-pdt-training | pdt-training (this) |
+  |-----------|---------------------|---------------------|
+  | ke        | 3.5 hr⁻¹            | 0.1 hr⁻¹            |
+  | ka        | 4.5 hr⁻¹            | 0.2 hr⁻¹            |
+  | ttd       | 12.0 hr (field)     | removed from config |
+
+With ke=3.5 (fast elimination), trough concentrations are effectively zero for all
+training patients (`e^(-3.5 * 0.5 * 48) ≈ 0`). The simulation generates data with
+essentially zero concentration at every timestep, which means the scaler floor fix
+(scale_ >= 1e-2) is load-bearing for preventing NaN in Vehicle normalisation.
+
+With ke=0.1 (slow elimination), drug accumulates between doses and patients
+develop non-trivial trough concentrations during training. This produces a richer
+concentration distribution in the training data, but means the simulation and the
+verification spec (DEFAULT_SPEC_PARAMS: Ke=3.5) are now deliberately decoupled —
+the model is trained on slow-elimination dynamics but formally verified against a
+fast-elimination safety region.
+
+Note on --alpha semantics: in trial/manual-pdt-training, `--alpha` is the task-loss
+weight (0.3 = 30% task / 70% constraint). In this branch, `--alpha` is repurposed as
+the GradNorm restoring-force exponent from Chen et al. 2018 (default 0.5). These are
+completely different quantities sharing a flag name.
+
+io.py: added `os.makedirs(os.path.dirname(x_path), exist_ok=True)` to `save_data` so
+that saving to `data/` does not fail when the directory does not yet exist.
 
 ------------------------------------------------------------------------
 
