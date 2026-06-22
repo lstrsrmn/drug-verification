@@ -18,10 +18,10 @@ def _global_l2_norm(grads: list[tf.Tensor | None]) -> tf.Tensor:
 
 
 class GradNorm:
-    """Gradient normalization for three-task training (task + 2 constraints).
+    """Gradient normalization for two-task training (task + constraint).
 
-    Balances task loss, safeFar constraint loss, and safeNear constraint loss
-    by adapting task weights online according to the GradNorm objective.
+    Balances task loss and constraint loss by adapting weights online
+    according to the GradNorm objective (Chen et al., ICML 2018).
     """
 
     def __init__(
@@ -29,20 +29,19 @@ class GradNorm:
         alpha: float,
         weight_lr: float,
         initial_constraint_weight: float = 1.0,
-        initial_constraint2_weight: float = 1.0,
         epsilon: float = 1e-8,
         min_weight: float = 0.05,
     ):
-        self.n_tasks = 3
+        self.n_tasks = 2
         self.alpha = tf.constant(alpha, dtype=tf.float32)
         self.epsilon = tf.constant(epsilon, dtype=tf.float32)
         self.min_weight = tf.constant(min_weight, dtype=tf.float32)
         self.normalised_initial_losses: tf.Tensor | None = None
         self.initial_losses: tf.Tensor | None = None
 
-        initial_task_weight = float(self.n_tasks) - float(initial_constraint_weight) - float(initial_constraint2_weight)
+        initial_task_weight = float(self.n_tasks) - float(initial_constraint_weight)
         init = tf.constant(
-            [initial_task_weight, float(initial_constraint_weight), float(initial_constraint2_weight)],
+            [initial_task_weight, float(initial_constraint_weight)],
             dtype=tf.float32,
         )
         init = self._renormalised_weights(init)
@@ -76,7 +75,6 @@ class GradNorm:
         self,
         task_loss: tf.Tensor,
         constraint_loss: tf.Tensor,
-        constraint2_loss: tf.Tensor,
         tape: tf.GradientTape,
         model_optimizer: tf.keras.optimizers.Optimizer,
         model_variables: list[tf.Variable],
@@ -85,9 +83,8 @@ class GradNorm:
 
         Args:
             task_loss: MSE prediction objective.
-            constraint_loss: safeFar Vehicle property loss.
-            constraint2_loss: safeNear Vehicle property loss.
-            tape: Persistent gradient tape that recorded all three losses.
+            constraint_loss: Vehicle safe property loss.
+            tape: Persistent gradient tape that recorded both losses.
             model_optimizer: Optimizer for model parameters.
             model_variables: Trainable model parameters.
 
@@ -97,7 +94,6 @@ class GradNorm:
         losses = tf.stack([
             tf.cast(task_loss, tf.float32),
             tf.cast(constraint_loss, tf.float32),
-            tf.cast(constraint2_loss, tf.float32),
         ])
 
         if self.initial_losses is None:
@@ -108,49 +104,34 @@ class GradNorm:
             )
             self.initial_losses = tf.stop_gradient(safe_initial)
 
-        # Normalise each loss by its initial value so all three start at ~1.0.
-        # Without this, safeNear (≈1065) gradient norms dwarf task (≈0.012) by
-        # ~88,000× and GradNorm can only reduce the imbalance by flooring weights,
-        # not by actually balancing gradient magnitudes.
+        # Normalise each loss by its initial value so both start at ~1.0.
         normalised_losses = losses / (self.initial_losses + self.epsilon)
 
         weighted_losses = self.weights * normalised_losses
         total_loss = tf.reduce_sum(weighted_losses)
 
-        # Compute per-loss gradients via the tape, then normalise by initial loss
-        # (equivalent to differentiating the normalised loss by linearity).
-        raw_task_grads       = tape.gradient(task_loss,        model_variables)
-        raw_constraint_grads = tape.gradient(constraint_loss,  model_variables)
-        raw_constraint2_grads= tape.gradient(constraint2_loss, model_variables)
+        # Compute per-loss gradients via the tape, then normalise by initial loss.
+        raw_task_grads       = tape.gradient(task_loss,       model_variables)
+        raw_constraint_grads = tape.gradient(constraint_loss, model_variables)
 
         t0 = self.initial_losses[0] + self.epsilon
         t1 = self.initial_losses[1] + self.epsilon
-        t2 = self.initial_losses[2] + self.epsilon
-        w0, w1, w2 = self.weights[0], self.weights[1], self.weights[2]
+        w0, w1 = self.weights[0], self.weights[1]
 
-        # Manually combine: model_grad = sum_i( w_i * raw_grad_i / initial_loss_i )
-        # This avoids relying on tape.gradient(total_loss) where total_loss was
-        # assembled outside the tape context, which can silently return zero gradients.
         model_grads = []
-        for g0, g1, g2, var in zip(
-            raw_task_grads, raw_constraint_grads, raw_constraint2_grads, model_variables
-        ):
+        for g0, g1, var in zip(raw_task_grads, raw_constraint_grads, model_variables):
             g0 = g0 if g0 is not None else tf.zeros_like(var)
             g1 = g1 if g1 is not None else tf.zeros_like(var)
-            g2 = g2 if g2 is not None else tf.zeros_like(var)
-            model_grads.append(w0 * g0 / t0 + w1 * g1 / t1 + w2 * g2 / t2)
+            model_grads.append(w0 * g0 / t0 + w1 * g1 / t1)
 
         self._apply_gradients(model_optimizer, model_grads, model_variables)
 
-        # Normalised per-task gradients for GradNorm base_norm computation
-        task_grads        = [g / t0 if g is not None else None for g in raw_task_grads]
-        constraint_grads  = [g / t1 if g is not None else None for g in raw_constraint_grads]
-        constraint2_grads = [g / t2 if g is not None else None for g in raw_constraint2_grads]
+        task_grads       = [g / t0 if g is not None else None for g in raw_task_grads]
+        constraint_grads = [g / t1 if g is not None else None for g in raw_constraint_grads]
 
         base_norms = tf.stack([
             _global_l2_norm(task_grads),
             _global_l2_norm(constraint_grads),
-            _global_l2_norm(constraint2_grads),
         ])
         base_norms = tf.stop_gradient(base_norms)
 
@@ -183,5 +164,4 @@ class GradNorm:
             "grad_norm_loss": grad_norm_loss,
             "task_weight": self.weights[0],
             "constraint_weight": self.weights[1],
-            "constraint2_weight": self.weights[2],
         }

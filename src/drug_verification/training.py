@@ -116,38 +116,30 @@ def update_vcl_scaler(scaler, y_scaler=None, spec_path="pk.vcl"):
     mean_str = ", ".join(f"{v:.8g}" for v in scaler.mean_)
     std_str = ", ".join(f"{v:.8g}" for v in scaler.scale_)
 
-    # Use .idx files instead for portability and to not have to overwrite a file
-    # with open(spec_path, "r") as f:
-    #     content = f.read()
+    with open(spec_path, "r") as f:
+        content = f.read()
 
-    # # Replace the value lines; patterns are anchored to the assignment so that
-    # # the type declaration lines above them are left untouched.
-    # content = re.sub(
-    #     r"(meanScalingValues\s*=\s*)\[.*?\]",
-    #     rf"\g<1>[{mean_str}]",
-    #     content,
-    # )
-    # content = re.sub(
-    #     r"(standardDeviationValues\s*=\s*)\[.*?\]",
-    #     rf"\g<1>[{std_str}]",
-    #     content,
-    # )
+    # Replace the value lines; patterns are anchored to the assignment so that
+    # the type declaration lines above them are left untouched.
+    content = re.sub(
+        r"(meanScalingValues\s*=\s*)\[.*?\]",
+        rf"\g<1>[{mean_str}]",
+        content,
+    )
+    content = re.sub(
+        r"(standardDeviationValues\s*=\s*)\[.*?\]",
+        rf"\g<1>[{std_str}]",
+        content,
+    )
 
-    # with open(spec_path, "w") as f:
-    #     f.write(content)
-
-    import os
-    os.makedirs("data", exist_ok=True)
+    with open(spec_path, "w") as f:
+        f.write(content)
 
     print(f"Updated {spec_path} with scaler values from this training run.")
     print(f"  meanScalingValues        = [{mean_str}]")
     print(f"  standardDeviationValues  = [{std_str}]")
-    idx2numpy.convert_to_file("data/pk_mean.idx", scaler.mean_)
-    idx2numpy.convert_to_file("data/pk_std.idx", scaler.scale_)
 
     if y_scaler is not None:
-        idx2numpy.convert_to_file("data/pk_y_mean.idx", y_scaler.mean_)
-        idx2numpy.convert_to_file("data/pk_y_std.idx", y_scaler.scale_)
         print(f"  y_mean (dose scaler)     = {y_scaler.mean_[0]:.8g}")
         print(f"  y_std  (dose scaler)     = {y_scaler.scale_[0]:.8g}")
 
@@ -225,28 +217,25 @@ def train_model_with_constraint(
     X_val,
     y_val,
     constraint_fn,
-    constraint2_fn,
     y_mean,
     y_std,
     alpha=C.DEFAULT_GRADNORM_ALPHA,
     gradnorm_lr=C.DEFAULT_GRADNORM_WEIGHT_LR,
     initial_constraint_weight=C.DEFAULT_INITIAL_CONSTRAINT_WEIGHT,
-    initial_constraint2_weight=C.DEFAULT_INITIAL_CONSTRAINT2_WEIGHT,
     optimizer_lr=C.DEFAULT_OPTIMIZER_LR,
     objective_constraint_weight=C.DEFAULT_TUNE_CONSTRAINT_OBJECTIVE_WEIGHT,
-    objective_constraint2_weight=C.DEFAULT_TUNE_CONSTRAINT2_OBJECTIVE_WEIGHT,
     trial=None,
     epochs=C.DEFAULT_EPOCHS,
     batch_size=C.DEFAULT_BATCH_SIZE,
     phase_switch=0,
     verbose=True,
 ):
-    """Train with task loss + safeFar + safeNear constraint losses balanced by GradNorm.
+    """Train with task loss + safe constraint loss balanced by GradNorm.
 
-    Uses a persistent GradientTape loop so that all three losses can be
+    Uses a persistent GradientTape loop so that both losses can be
     backpropagated and their weights adapted online via GradNorm.
 
-    Constraint functions take a single keyword argument: pk=network_fn.
+    The constraint function takes a single keyword argument: pk=network_fn.
     All spec parameters (Ka, Ke, Vd, scaler values etc.) are inlined in the
     generated training spec and do not need to be passed here.
 
@@ -254,19 +243,16 @@ def train_model_with_constraint(
         model: Keras model.
         X_train, y_train: Training data.
         X_val, y_val: Validation data.
-        constraint_fn: Compiled safeFar loss callable.
-        constraint2_fn: Compiled safeNear loss callable.
+        constraint_fn: Compiled safe loss callable.
         y_mean: Mean from the y StandardScaler (scalar). Used to de-normalise
             model output before passing to Vehicle constraint functions, which
             expect doses in physical units (mg).
         y_std: Scale from the y StandardScaler (scalar).
         alpha: GradNorm restoring-force exponent (Chen et al., 2018).
         gradnorm_lr: Learning rate for GradNorm's weight optimizer.
-        initial_constraint_weight: Initial relative weight for safeFar loss.
-        initial_constraint2_weight: Initial relative weight for safeNear loss.
+        initial_constraint_weight: Initial relative weight for safe loss.
         optimizer_lr: Learning rate for model parameter optimizer.
-        objective_constraint_weight: safeFar coefficient in Optuna objective metric.
-        objective_constraint2_weight: safeNear coefficient in Optuna objective metric.
+        objective_constraint_weight: safe coefficient in Optuna objective metric.
         trial: Optional Optuna trial for pruning support.
         epochs: Number of training epochs.
         batch_size: Batch size.
@@ -275,7 +261,7 @@ def train_model_with_constraint(
         verbose: Whether to print per-epoch logs.
 
     Returns:
-        dict with per-epoch history: task/constraint/constraint2/total losses,
+        dict with per-epoch history: task/constraint/total losses,
         val_loss, grad_norm_loss, objective_metric, and adaptive weights.
     """
     optimizer = tf.keras.optimizers.Adam(learning_rate=optimizer_lr)
@@ -286,7 +272,6 @@ def train_model_with_constraint(
         alpha=alpha,
         weight_lr=gradnorm_lr,
         initial_constraint_weight=initial_constraint_weight,
-        initial_constraint2_weight=initial_constraint2_weight,
         min_weight=C.DEFAULT_GRADNORM_MIN_WEIGHT,
     )
 
@@ -300,35 +285,31 @@ def train_model_with_constraint(
         normalised = tf.reshape(model(tf.reshape(x, [1, -1]), training=True), [-1])
         return normalised * _y_std + _y_mean
 
-    # Verify constraint functions backpropagate through the model before training.
-    # If all gradients are None, the Vehicle compiled function is not connected to
-    # the model graph and constraint training will have no effect.
-    for _fn_name, _fn in [("constraint_fn (safeFar)", constraint_fn), ("constraint2_fn (safeNear)", constraint2_fn)]:
-        with tf.GradientTape() as _tape:
-            _loss = _fn(pk=network_fn)
-        _grads = _tape.gradient(_loss, model.trainable_variables)
-        if all(g is None for g in _grads):
-            import warnings
-            warnings.warn(
-                f"{_fn_name} produces no gradients w.r.t. model variables. "
-                "The Vehicle compiled function may not be connected to the model graph — "
-                "constraint losses will not drive training."
-            )
-        elif verbose:
-            n_none = sum(1 for g in _grads if g is None)
-            print(f"Gradient check {_fn_name}: OK ({len(_grads) - n_none}/{len(_grads)} variables have gradients)")
+    # Verify constraint function backpropagates through the model before training.
+    with tf.GradientTape() as _tape:
+        _loss = constraint_fn(pk=network_fn)
+    _grads = _tape.gradient(_loss, model.trainable_variables)
+    if all(g is None for g in _grads):
+        import warnings
+        warnings.warn(
+            "constraint_fn produces no gradients w.r.t. model variables. "
+            "The Vehicle compiled function may not be connected to the model graph — "
+            "constraint losses will not drive training."
+        )
+    elif verbose:
+        n_none = sum(1 for g in _grads if g is None)
+        print(f"Gradient check constraint_fn: OK ({len(_grads) - n_none}/{len(_grads)} variables have gradients)")
 
     history = {
-        "task_loss": [], "constraint_loss": [], "constraint2_loss": [],
+        "task_loss": [], "constraint_loss": [],
         "total_loss": [], "val_loss": [], "grad_norm_loss": [],
-        "objective_metric": [], "task_weight": [],
-        "constraint_weight": [], "constraint2_weight": [],
+        "objective_metric": [], "task_weight": [], "constraint_weight": [],
     }
 
     for epoch in range(epochs):
-        epoch_task = epoch_constraint = epoch_constraint2 = 0.0
+        epoch_task = epoch_constraint = 0.0
         epoch_total = epoch_grad_norm = 0.0
-        epoch_task_w = epoch_con_w = epoch_con2_w = 0.0
+        epoch_task_w = epoch_con_w = 0.0
         n_batches = 0
         constraint_active = (phase_switch == 0) or (epoch >= phase_switch)
 
@@ -350,18 +331,13 @@ def train_model_with_constraint(
                     constraint_loss = tf.cast(
                         tf.reduce_mean(constraint_fn(pk=network_fn)), tf.float32
                     )
-                    constraint2_loss = tf.cast(
-                        tf.reduce_mean(constraint2_fn(pk=network_fn)), tf.float32
-                    )
                 else:
                     constraint_loss = tf.constant(0.0)
-                    constraint2_loss = tf.constant(0.0)
 
             if constraint_active:
                 batch_info = grad_norm.balance(
                     task_loss=task_loss,
                     constraint_loss=constraint_loss,
-                    constraint2_loss=constraint2_loss,
                     tape=tape,
                     model_optimizer=optimizer,
                     model_variables=model.trainable_variables,
@@ -374,18 +350,15 @@ def train_model_with_constraint(
                     "grad_norm_loss": tf.constant(0.0),
                     "task_weight": tf.constant(1.0),
                     "constraint_weight": tf.constant(0.0),
-                    "constraint2_weight": tf.constant(0.0),
                 }
             del tape
 
             epoch_task += float(task_loss.numpy())
             epoch_constraint += float(constraint_loss.numpy())
-            epoch_constraint2 += float(constraint2_loss.numpy())
             epoch_total += float(batch_info["total_loss"].numpy())
             epoch_grad_norm += float(batch_info["grad_norm_loss"].numpy())
             epoch_task_w += float(batch_info["task_weight"].numpy())
             epoch_con_w += float(batch_info["constraint_weight"].numpy())
-            epoch_con2_w += float(batch_info["constraint2_weight"].numpy())
             n_batches += 1
 
         val_preds = model(X_val, training=False)
@@ -394,19 +367,16 @@ def train_model_with_constraint(
         objective_metric = (
             val_loss
             + objective_constraint_weight * (epoch_constraint / n_batches)
-            + objective_constraint2_weight * (epoch_constraint2 / n_batches)
         )
 
         history["task_loss"].append(epoch_task / n_batches)
         history["constraint_loss"].append(epoch_constraint / n_batches)
-        history["constraint2_loss"].append(epoch_constraint2 / n_batches)
         history["total_loss"].append(epoch_total / n_batches)
         history["val_loss"].append(val_loss)
         history["grad_norm_loss"].append(epoch_grad_norm / n_batches)
         history["objective_metric"].append(objective_metric)
         history["task_weight"].append(epoch_task_w / n_batches)
         history["constraint_weight"].append(epoch_con_w / n_batches)
-        history["constraint2_weight"].append(epoch_con2_w / n_batches)
 
         if trial is not None:
             trial.report(objective_metric, step=epoch)
@@ -419,12 +389,10 @@ def train_model_with_constraint(
             print(
                 f"Epoch {epoch + 1}/{epochs}{phase_label} — "
                 f"task: {epoch_task / n_batches:.4f}, "
-                f"safeFar: {epoch_constraint / n_batches:.4f}, "
-                f"safeNear: {epoch_constraint2 / n_batches:.4f}, "
+                f"safe: {epoch_constraint / n_batches:.4f}, "
                 f"total: {epoch_total / n_batches:.4f}, "
                 f"weights: ({epoch_task_w / n_batches:.3f}, "
-                f"{epoch_con_w / n_batches:.3f}, "
-                f"{epoch_con2_w / n_batches:.3f}), "
+                f"{epoch_con_w / n_batches:.3f}), "
                 f"val: {val_loss:.4f}"
             )
 

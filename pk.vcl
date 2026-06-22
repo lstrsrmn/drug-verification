@@ -14,13 +14,13 @@ type OutputVector= Tensor Real [1]
 -- They must match the StandardScaler fitted during training exactly; any
 -- divergence means verification applies to different normalisation than the
 -- exported ONNX model uses, silently invalidating the formal proof.
-@dataset
+-- @dataset
 meanScalingValues : UnnormalisedInputVector
--- meanScalingValues = [13.434305, 37.730657, 11.876029, 50.803191, 76.441588]
+meanScalingValues = [13.434305, 37.730657, 11.876029, 50.803191, 76.441588]
 
-@dataset
+-- @dataset
 standardDeviationValues : UnnormalisedInputVector
--- standardDeviationValues =  [7.3122337, 0.62039077, 2.5428018, 23.166708, 14.39579]
+standardDeviationValues =  [7.3122337, 0.62039077, 2.5428018, 23.166708, 14.39579]
 
 normalise : UnnormalisedInputVector -> InputVector
 normalise x = foreach i .
@@ -88,50 +88,27 @@ Ke_under : Real
 @parameter
 eps : Real
 
-safeFarInput : InputVector -> Bool
-safeFarInput x =
-    0 <= x ! conc <= C_safe * 0.99 and
-    36.5 <= x ! temp <= 40 and
-    7.5 <= x ! wbc <= 20 and
-    18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100
-
-safeFarOutput : InputVector -> Bool
-safeFarOutput x = let y = ((((normpk x) ! 0) * Ka) / (Vd * (Ka - Ke))) in
-           if Ka < Ke
-           then (x ! conc) + y * (Ke_under - Ka_over) < C_safe
-           else (x ! conc) + y * (Ke_over - Ka_under) < C_safe
-           -- C + C(D, max_root) < C_safe
-
-@property
-safeFar : Bool
-safeFar = forall x . safeFarInput x => safeFarOutput x
-
-safeNearInput : InputVector -> Bool
-safeNearInput x =
-    C_safe * 0.99 <= x ! conc <= C_safe and
-    36.5 <= x ! temp <= 40 and
-    7.5 <= x ! wbc <= 20 and
-    18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100
-
-safeNearOutput : InputVector -> Bool
-safeNearOutput x = ((normpk x) ! 0) < eps
-
-@property
-safeNear : Bool
-safeNear = forall x . safeNearInput x => safeNearOutput x
-
-safeInput : InputVector -> Bool
+safeInput : UnnormalisedInputVector -> Bool
 safeInput x =
-    0 <= x ! conc <= C_safe and
-    36.5 <= x ! temp <= 40 and
-    7.5 <= x ! wbc <= 20 and
-    18 <= x ! age <= 89 and
-    50 <= x ! weight <= 100
+  0    <= x ! conc   <= C_safe and
+  36.5 <= x ! temp   <= 40     and
+  7.5  <= x ! wbc    <= 20     and
+  18   <= x ! age    <= 89     and
+  50   <= x ! weight <= 100
 
-nonNegOutput : InputVector -> Bool
-nonNegOutput x =  0 <= (normpk x) ! 0
+safeOutput : UnnormalisedInputVector -> Bool
+safeOutput x =
+  let y = ((((normpk x) ! 0)*Ka) / (Vd*(Ka - Ke)))
+  in if Ka < Ke
+   then (x!conc) + y*(Ke_under - Ka_over) <= C_safe
+   else (x!conc) + y*(Ke_over - Ka_under) <= C_safe
+
+@property
+safe : Bool
+safe = forall x . safeInput x => safeOutput x
+
+nonNegOutput : UnnormalisedInputVector -> Bool
+nonNegOutput x = 0 <= (normpk x) ! 0
 
 @property
 nonNeg : Bool
